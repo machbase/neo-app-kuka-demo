@@ -70,8 +70,6 @@ cd /work/neo-app-kuka-demo/app
 cd /work/neo-app-kuka-demo
 pkg run schema
 pkg run seed
-pkg run download-lerobot
-pkg run import-lerobot
 pkg run start
 pkg run check
 ```
@@ -92,67 +90,20 @@ DB 설정은 JSH 환경의 `NEO_APP_DB_HOST`, `NEO_APP_DB_PORT`, `NEO_APP_DB_USE
 `NEO_APP_DB_PASSWORD`를 읽습니다. 기본값은 `127.0.0.1`, `5656`, `sys`, `manager`이며
 `.env` 파일은 자동으로 읽지 않습니다.
 
-## 대용량 데이터 적재
-
-LeRobot의 compact 상태·동작 Parquet는 기본 저장소에 포함하지 않으며 Hugging Face에서
-한 번 내려받습니다.
-31.98GiB RLDS 전체판과 LeRobot 영상은 사용하지 않습니다.
-
-### 1. 스키마 생성
-
-JSH에서 프로젝트 루트로 이동한 뒤 실행합니다.
-
-```text
-cd /work/neo-app-kuka-demo
-./scripts/schema.js
-```
-
-이 명령은 `NEO_APP_ROBOT_MOTION`, `NEO_APP_ROBOT_RUN`, `NEO_APP_LEROBOT_MOTION`을
-생성합니다. `IF NOT EXISTS` 방식이라 기존 행을 삭제하지 않습니다.
-
-### 2. LeRobot 상태·동작 적재
-
-먼저 8,849,485바이트 Parquet 한 파일을 받습니다. 여기에는 20Hz로 기록된 149,985개
-프레임과 3,000개 episode가 모두 들어 있습니다.
-
-```text
-./scripts/download-lerobot.js
-```
-
-기본 저장 위치는 `/work/neo-app-kuka-demo/data/lerobot/stanford-kuka-state.parquet`이며 Git에
-포함되지 않습니다. 다른 마운트에 저장하려면 다운로드에는 `--dir`, import에는 `--file`을
-사용합니다. 먼저 DB 연결과 파싱을 확인할 때는 2행만 적재합니다.
-
-```text
-./scripts/import-lerobot.js --limit 2
-```
-
-전체 LeRobot 변환판을 적재하려면 다음을 실행합니다.
-
-```text
-./scripts/import-lerobot.js
-```
-
-전체 149,985행을 성공한 경우에만 완료 마커가 저장됩니다. `--limit` 또는 실패 실행은
-부분 행을 남기지만 플레이에는 사용되지 않습니다. `observation.state`는 관절각이 아니라
-`[x, y, z, qx, qy, qz, qw]` 말단장치 pose이며, `action`은
-`[dx, dy, dz, drx, dry, drz, gripper]`입니다. 화면은 XYZ를 IK로 재구성합니다. 원본에는
-실제 관절각이 없으므로 재구성된 로봇 자세는 가능한 한 가지 해입니다. RLDS 31.98GiB,
-영상, Depth, Optical Flow는 다운로드하지 않습니다.
-
 ## 데모 모드
 
 - **Full playback**: 공개 프레임 전체를 불러와 사용자 1–30을 자동 재생합니다. 원래
   사용자별 타임스탬프와 시나리오 간격을 보존합니다. `Skip long idle gaps`를 켜면
-  시나리오 사이 대기만 줄이고, 끄면 전체 1시간 42분 21초 타임라인이 됩니다.
+  시나리오 사이 대기만 줄이고, 끄면 전체 1시간 42분 21초 타임라인이 됩니다. 명시적으로
+  Full playback을 선택하면 현재 선택한 로봇 모델을 유지합니다. KR 6과 iisy에서는 원본
+  iiwa 관절 신호를 각 모델의 안전한 Studio 관절 범위로 retarget하며 차트는 원본값을 표시합니다.
 - **Scenario**: 사용자 1–30과 시나리오 1–15를 선택합니다. 개별 동작은 약 3.1–15.8초입니다.
 - **Studio**: 12초 Axis Showcase와 10초 Pick & Place를 재생합니다. KR 6 또는 iisy를
   선택하면 Studio로 자동 전환합니다.
-- **LeRobot**: Episode를 선택하거나 149,985개 Cartesian pose 전체를 재생합니다. XYZ 경로를
-  IK로 재구성하며, `Load all`을 눌러야 전체 상태가 브라우저로 전송됩니다.
 
-카메라 회전·확대, 0.5×–10× 속도, 타임라인 탐색, 관절 슬라이더, XYZ IK 목표점,
-말단 궤적과 관절 차트를 지원합니다. 브라우저가 reduced motion을 요청하면 자동 재생하지 않습니다.
+카메라 회전·확대, 0.5×–10× 속도, 타임라인 탐색, 관절 슬라이더, XYZ IK 목표점과
+말단 궤적을 지원합니다. Motion Signature는 시간축 확대·이동, 전체 미니맵, 현재 위치 추적,
+Reset과 프레임별 상세값 조회를 제공합니다. 브라우저가 reduced motion을 요청하면 자동 재생하지 않습니다.
 
 ## API
 
@@ -164,9 +115,6 @@ cd /work/neo-app-kuka-demo
 | `GET /api/trajectory?mode=full` | 실측 33,271프레임 전체 |
 | `GET /api/trajectory?mode=scenario&user=1&task=1` | 선택한 실측 시나리오 |
 | `GET /api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase` | 생성 동작 |
-| `GET /api/datasets` | 기본·LeRobot 적재 여부 |
-| `GET /api/lerobot/episodes` | LeRobot 3,000개 에피소드 |
-| `GET /api/lerobot/trajectory?episode=0` | LeRobot 한 에피소드 |
 
 응답은 `{ok:true,data}` / `{ok:false,error:{code,message}}` 형식입니다. 모델·모드·사용자·
 시나리오·동작을 DB 작업 전에 검증합니다. 원본 CSV, 서버 소스, 자격정보, Git 파일은

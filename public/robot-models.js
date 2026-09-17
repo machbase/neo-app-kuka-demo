@@ -22,6 +22,7 @@ export const ROBOT_MODELS = {
     camera: { position: [1.7, 1.45, 1.15], target: [0, 0, .52] },
     base: { file: 'base_link.dae', xyz: [0, 0, 0], rpy: [0, 0, 0] },
     home: [0, -55, 65, 0, 45, 0],
+    publicMotionRange: [[-55, 55], [-80, -42], [38, 92], [-65, 65], [-35, 55], [-100, 100]],
     joints: [
       { xyz: [0, 0, .208], rpy: [Math.PI, 0, 0], axis: [0, 0, 1], min: -170, max: 170, file: 'link_1.dae', visualXyz: [0, 0, .208], visualRpy: [-Math.PI, 0, 0] },
       { xyz: [.025, -.0907, -.192], rpy: [Math.PI / 2, 0, 0], axis: [0, 0, 1], min: -190, max: 45, file: 'link_2.dae', visualXyz: [-.4, -.025, -.0907], visualRpy: [Math.PI / 2, 0, Math.PI / 2] },
@@ -38,6 +39,7 @@ export const ROBOT_MODELS = {
     camera: { position: [1.45, 1.25, 1.05], target: [0, 0, .45] },
     base: { file: 'base_link.stl', color: 0xf0f1f2, xyz: [0, 0, 0], rpy: [0, 0, 0] },
     home: [0, -55, 65, 0, 40, 0],
+    publicMotionRange: [[-50, 50], [-92, -45], [45, 105], [-45, 45], [20, 65], [-60, 60]],
     joints: [
       { xyz: [0, 0, .1264], rpy: [0, 0, 0], axis: [0, 0, -1], min: -185, max: 185, file: 'link_1.stl', color: 0xf5f5f4 },
       { xyz: [0, 0, .0886], rpy: [-Math.PI / 2, 0, 0], axis: [0, 0, 1], min: -230, max: 50, file: 'link_2.stl', color: 0xe7e8e9 },

@@ -27,21 +27,6 @@ The seed command reads all 33,271 records, converts the seven `JointPosition` co
 degrees to radians, and preserves `Time/Second`, `Time Stamp`, participant number, and task
 number. Participant demographic data and the maze image are not included.
 
-## Stanford KUKA Multimodal Dataset (LeRobot conversion)
-
-The optional downloader retrieves the compact Parquet from
-[`lerobot/stanford_kuka_multimodal_dataset`](https://huggingface.co/datasets/lerobot/stanford_kuka_multimodal_dataset).
-The converted dataset is listed as MIT licensed and contains 149,985 frames at 20 FPS.
-`observation.state` holds end-effector XYZ and quaternion values; it does not contain measured
-joint angles. This application imports only the state/action rows and does not download the
-31.98 GiB RLDS conversion or video files.
-
-## hyparquet
-
-The JSH importer includes hyparquet 1.31.0, Copyright 2023–2026 Hugh McNally, under the MIT
-License. It parses the downloaded Parquet without adding a JSH package dependency. The complete
-license is included in `third_party/licenses/hyparquet-MIT.txt`.
-
 ## Three.js
 
 The browser renderer uses Three.js r186, Copyright © 2010–2026 three.js authors, under the

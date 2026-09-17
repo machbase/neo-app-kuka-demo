@@ -5,7 +5,7 @@ const process = require('process');
 const ROOT = path.dirname(path.dirname(path.resolve(process.argv[1])));
 const { dbConfig, options } = require(path.join(ROOT, 'lib/config.js'));
 const { withConnection } = require(path.join(ROOT, 'lib/db.js'));
-const { MOTION_TABLE, RUN_TABLE, LEROBOT_TABLE, DDLS, ensureSchema } = require(path.join(ROOT, 'lib/schema.js'));
+const { MOTION_TABLE, RUN_TABLE, DDLS, ensureSchema } = require(path.join(ROOT, 'lib/schema.js'));
 
 try {
   const args = options({ print: { type: 'boolean' } });
@@ -16,7 +16,7 @@ try {
   } else {
     withConnection(dbConfig(), (connection) => ensureSchema(connection));
     console.println(JSON.stringify({
-      ok: true, tables: [MOTION_TABLE, RUN_TABLE, LEROBOT_TABLE],
+      ok: true, tables: [MOTION_TABLE, RUN_TABLE],
       message: 'Robot motion schema ready; existing tables and data preserved.'
     }));
   }

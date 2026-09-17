@@ -5,7 +5,7 @@ const path = require('path');
 const process = require('process');
 const ROOT = path.dirname(path.dirname(path.resolve(process.argv[1])));
 const { dbConfig, integer, options } = require(path.join(ROOT, 'lib/config.js'));
-const { datasets, lerobotEpisodes, lerobotFull, lerobotTrajectory, robots, scenarios, trajectory } = require(path.join(ROOT, 'lib/api.js'));
+const { robots, scenarios, trajectory } = require(path.join(ROOT, 'lib/api.js'));
 const manifest = require(path.join(ROOT, 'package.json'));
 
 function route(handler) {
@@ -51,17 +51,8 @@ function main() {
   server.static('/assets', path.join(publicDir, 'assets'));
   server.static('/vendor', path.join(publicDir, 'vendor'));
   server.get('/api/health', route(() => ({ app: manifest.name, version: manifest.version })));
-  server.get('/api/datasets', route(() => datasets(config)));
   server.get('/api/robots', route(() => robots()));
   server.get('/api/scenarios', route(() => scenarios(config)));
-  server.get('/api/lerobot/episodes', route(() => lerobotEpisodes(config)));
-  server.get('/api/lerobot/trajectory', route((ctx) => {
-    const query = new URLSearchParams(ctx.request.query);
-    if (query.get('mode') === 'full') return lerobotFull(config);
-    const episode = Number(query.get('episode'));
-    if (!Number.isInteger(episode) || episode < 0 || episode > 2999) throw Object.assign(new Error('episode must be an integer between 0 and 2999.'), { status: 400, code: 'INVALID_EPISODE' });
-    return lerobotTrajectory(config, episode);
-  }));
   server.get('/api/trajectory', route((ctx) => {
     const query = new URLSearchParams(ctx.request.query);
     return trajectory(config, query);

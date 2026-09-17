@@ -34,11 +34,6 @@ The current `machcli` documentation describes the 8.7.0 database selection optio
 
 The browser uses Three.js r186 and public robot meshes as locally served static assets. These are browser dependencies and are not installed by JSH `pkg`; the exact files and licenses are checked into the repository. `http.Server.static()` exposes only the dedicated `public/assets` and `public/vendor` trees. Robot descriptions, source CSV files, and license source files remain outside the web root.
 
-The optional LeRobot downloader uses the documented JSH `http.get()` client to fetch one
-8,849,485-byte Parquet. The importer uses a checked-in CommonJS build of hyparquet 1.31.0 with
-small `TextEncoder`/`TextDecoder` compatibility shims for JSH 8.7. The importer requires an
-explicit download step and writes a completion marker only after the complete source succeeds.
-
 `addShutdownHook()` is not guaranteed to run on forced termination or unhandled OS signals. Clean up DB resources in the request or command's `finally` block, and do not rely on a shutdown hook alone to preserve data.
 
 The `service` module requires `SERVICE_CONTROLLER` or an explicit controller address. Do not assume that standalone JSH always has access to Neo service management. The current app runs an HTTP server in the foreground and does not register a service.

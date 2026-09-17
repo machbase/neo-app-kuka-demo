@@ -175,3 +175,47 @@ The JSH checker passed all 11 current API checks. The two removed routes returne
 `/api/datasets` returned only `publicMotion` and `lerobot`, and the served HTML contained exactly
 two dataset buttons. Existing database objects are preserved by policy and are no longer queried
 or exposed by the application.
+
+## 2026-09-17: Interactive Motion Signature navigation
+
+The Motion Signature browser UI added time-axis zoom and pan, a full-range overview, playback
+following, reset, and per-frame value inspection. JavaScript syntax, HTML ID wiring, whitespace,
+and isolated viewport-state/render-event checks passed.
+
+Chromium `153.0.8010.12` was exercised through temporary external Playwright tooling against the
+actual checked-in browser files with mocked API responses. The test loaded both 33,271 public
+frames and all 149,985 LeRobot frames, then passed button and wheel zoom, chart and overview pan,
+overview repositioning, reset, Follow release/resume, chart seek with playback pause, joint and
+Cartesian tooltips, touch pinch zoom, and the 375px layout without horizontal overflow. No
+browser console or page errors occurred.
+
+The same browser run selected KR 6 R900-2 and LBR iisy 3 R760, entered Studio as expected, and
+then selected Full playback. Both runs retained the selected model instead of switching back to
+LBR iiwa 7 R800. Public iiwa joint signals spanning the checked-in dataset ranges were retargeted
+into each model's conservative Studio ranges. The iisy output stayed inside all six configured
+ranges and retained connected geometry at 0%, 25%, 50%, 75%, and 100% of the actual checked-in
+public dataset playback. The UI reported the retargeted state while the Motion Signature tooltip
+continued to report the source iiwa values.
+
+This round did not run the server through Machbase Neo JSH or query a live database because the
+Neo executable path was not confirmed for this session. The mocked browser result verifies the
+frontend interaction and large in-memory frame paths, not live HTTP or DB behavior.
+
+## 2026-09-17: LeRobot feature removal
+
+The optional LeRobot feature was removed from the current application contract. The browser no
+longer exposes a dataset selector, episode controls, Cartesian-state rendering, or full LeRobot
+loading. The server no longer registers `/api/datasets` or `/api/lerobot/*`; schema setup now
+declares only `NEO_APP_ROBOT_MOTION` and `NEO_APP_ROBOT_RUN`. The downloader, importer, manifest,
+hyparquet bundle and license, package commands, current documentation, and API checks were removed
+together. No destructive cleanup of existing database objects or ignored local data was performed.
+
+JavaScript syntax, HTML ID wiring, whitespace, and the absence of current LeRobot references all
+passed static checks. Chromium `153.0.8010.12` loaded the actual browser files with all 33,271
+checked-in public frames through mocked API responses. Three-model switching and retargeting,
+Full/Studio playback, Motion Signature navigation, touch pinch, and the 375px layout passed with
+no console or page errors; the served UI contained no dataset selector or LeRobot text.
+
+This removal round did not run the JSH server or query the live database because the Neo executable
+path was not confirmed for this session. Route 404 behavior, the reduced eight-check JSH worker,
+and live schema output therefore remain unverified in this round.

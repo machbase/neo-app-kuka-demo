@@ -6,8 +6,6 @@
     "start": "./app/server.js",
     "schema": "./scripts/schema.js",
     "seed": "./scripts/seed.js",
-    "download-lerobot": "./scripts/download-lerobot.js",
-    "import-lerobot": "./scripts/import-lerobot.js",
     "check": "./scripts/check.js"
   },
   "dependencies": {}

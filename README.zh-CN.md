@@ -50,8 +50,6 @@ cd /work/neo-app-kuka-demo/app
 cd /work/neo-app-kuka-demo
 pkg run schema
 pkg run seed
-pkg run download-lerobot
-pkg run import-lerobot
 pkg run start
 pkg run check
 ```
@@ -62,35 +60,18 @@ DB 配置来自 `NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER` 和
 `NEO_APP_DB_PASSWORD`。默认值为 `127.0.0.1`、`5656`、`sys`、`manager`。应用不会
 自动读取 `.env`。
 
-## 加载大型数据集
-
-不使用 31.98GiB 的 RLDS 全量版本，也不下载 LeRobot 视频。只从 Hugging Face 下载一次
-8,849,485 字节的 compact state/action Parquet。
-
-```text
-cd /work/neo-app-kuka-demo
-./scripts/schema.js
-./scripts/download-lerobot.js
-./scripts/import-lerobot.js --limit 2
-./scripts/import-lerobot.js
-```
-
-Parquet 包含全部 149,985 帧、3,000 个 episode，采样率为 20Hz。默认保存到
-`data/lerobot/stanford-kuka-state.parquet`。只有全部导入成功后才写入完成标记。
-`observation.state` 不是七个关节角，而是末端执行器 pose
-`[x, y, z, qx, qy, qz, qw]`。画面用 XYZ 和逆运动学重建一种可能的机器人姿态；原数据
-不含实测关节角。
-
 ## 展示模式
 
 - **Full playback**：加载全部 33,271 帧并自动播放 30 名用户的数据。关闭
-  `Skip long idle gaps` 后可保留原始的 1 小时 42 分 21 秒时间线。
+  `Skip long idle gaps` 后可保留原始的 1 小时 42 分 21 秒时间线。明确选择
+  Full playback 时，当前机器人模型保持不变。在 KR 6 和 iisy 上，原始 iiwa 关节信号
+  会被 retarget 到各模型安全的 Studio 关节范围，而图表仍显示原始数值。
 - **Scenario**：选择 User 1–30 和 Scenario 1–15。单个动作约 3.1–15.8 秒。
 - **Studio**：为三个模型播放 Axis Showcase 或 Pick & Place。
-- **LeRobot**：选择一个 Episode，或明确加载全部 149,985 个状态帧。
 
 可选模型为 LBR iiwa 7 R800、KR 6 R900-2 和 LBR iisy 3 R760。页面支持相机旋转缩放、
-0.5×–10× 播放、时间轴定位、关节控制、XYZ IK、末端轨迹和同步关节图表。
+0.5×–10× 播放、时间轴定位、关节控制、XYZ IK 和末端轨迹。Motion Signature 支持时间轴
+缩放与平移、全局缩略图、当前位置跟随、Reset 以及逐帧数值查看。
 
 ## API
 
@@ -102,9 +83,6 @@ Parquet 包含全部 149,985 帧、3,000 个 episode，采样率为 20Hz。默�
 | `GET /api/trajectory?mode=full` | 全部 33,271 帧 |
 | `GET /api/trajectory?mode=scenario&user=1&task=1` | 一个实测场景 |
 | `GET /api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase` | 生成动作 |
-| `GET /api/datasets` | 各数据集的加载状态 |
-| `GET /api/lerobot/episodes` | LeRobot Episode 列表 |
-| `GET /api/lerobot/trajectory?episode=0` | 一个 LeRobot Episode |
 
 响应格式为 `{ok:true,data}` / `{ok:false,error:{code,message}}`。原始 CSV、服务器源码、
 凭据和 Git 文件不会通过 HTTP 公开。

@@ -13,15 +13,17 @@ const ui = {};
   'robot-name', 'robot-spec', 'joint-controls', 'manual-state', 'tool-position', 'data-status',
   'full-options', 'scenario-options', 'studio-options', 'user-select', 'task-select',
   'scenario-info', 'motion-select', 'skip-idle', 'toggle-target', 'reset-camera',
-  'source-title', 'source-link', 'joint-chart', 'chart-legend', 'hero-stats', 'chart-title'
-  , 'lerobot-options', 'lerobot-episode', 'lerobot-full', 'lerobot-info'
+  'source-title', 'source-link', 'joint-chart', 'chart-overview', 'chart-viewport', 'chart-tooltip',
+  'chart-legend', 'chart-current', 'chart-range', 'chart-zoom-out', 'chart-zoom-in',
+  'chart-reset', 'chart-follow'
 ].forEach((id) => { ui[id] = $(id); });
 
 const state = {
-  dataset: 'public', modelId: 'iiwa7-r800', mode: 'full', motion: 'showcase', robot: null,
+  modelId: 'iiwa7-r800', mode: 'full', motion: 'showcase', robot: null,
   trajectory: null, frames: [], durationMs: 0, timeMs: 0, playing: false,
   speed: 10, lastFrameAt: performance.now(), scenarios: [], loadToken: 0,
-  lerobotEpisodes: [], targetVisible: false, trail: [], lastChartAt: 0
+  targetVisible: false, trail: [], lastChartAt: 0,
+  chartStartMs: 0, chartEndMs: 0, chartFollow: true, chartHoverMs: null, chartMaxAbs: 1
 };
 
 const assetCache = new Map();
@@ -30,6 +32,11 @@ const stlLoader = new STLLoader();
 const colladaLoader = new ColladaLoader();
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const colors = ['#ff6b18', '#5de4d3', '#64a9ff', '#f6d365', '#b98cff', '#ff7597', '#a6ef67'];
+const chartInteraction = { pointers: new Map(), drag: null, pinch: null, overviewDrag: null };
+const CHART_MIN_WINDOW_MS = 1000;
+const CHART_ZOOM_FACTOR = 1.5;
+// Preserve the source signal while keeping non-iiwa playback inside model-safe poses.
+const PUBLIC_MOTION_RANGE = [[-80, 15], [44, 82], [19, 80], [-102, -15], [-76, -17], [48, 95], [-30, 75]];
 let renderer, scene, camera, orbit, transform, transformHelper, target, trailLine, part;
 
 async function getJson(url) {
@@ -185,7 +192,7 @@ function createJointControls() {
 
 function updateChartLegend() {
   ui['chart-legend'].replaceChildren();
-  const labels = state.dataset === 'lerobot' ? ['X', 'Y', 'Z', 'QX', 'QY', 'QZ', 'QW'] : state.robot ? state.robot.joints.map((_, index) => 'J' + (index + 1)) : [];
+  const labels = state.robot ? state.robot.joints.map((_, index) => 'J' + (index + 1)) : [];
   labels.forEach((label, index) => {
     const legend = document.createElement('span'); legend.innerHTML = '<i style="background:' + colors[index] + '"></i>' + label;
     ui['chart-legend'].appendChild(legend);
@@ -282,28 +289,27 @@ function prepareFrames(data) {
     if (index) {
       const previous = data.frames[index - 1];
       let delta = frame.tMs - previous.tMs;
-      if (state.dataset === 'public' && state.mode === 'full' && ui['skip-idle'].checked && frame.scenario !== previous.scenario && delta > 600) delta = 600;
+      if (state.mode === 'full' && ui['skip-idle'].checked && frame.scenario !== previous.scenario && delta > 600) delta = 600;
       playback += Math.max(0, delta);
     }
-    return { ...frame, playTMs: state.dataset === 'public' && state.mode === 'full' && ui['skip-idle'].checked ? playback : frame.tMs };
+    return { ...frame, playTMs: state.mode === 'full' && ui['skip-idle'].checked ? playback : frame.tMs };
   });
 }
 
 async function loadTrajectory() {
   const token = ++state.loadToken;
   let url;
-  if (state.dataset === 'lerobot') url = state.mode === 'lerobot-full' ? './api/lerobot/trajectory?mode=full' : './api/lerobot/trajectory?episode=' + ui['lerobot-episode'].value;
-  else if (state.mode === 'full') url = './api/trajectory?mode=full';
+  if (state.mode === 'full') url = './api/trajectory?mode=full';
   else if (state.mode === 'scenario') url = './api/trajectory?mode=scenario&user=' + ui['user-select'].value + '&task=' + ui['task-select'].value;
   else url = './api/trajectory?mode=studio&model=' + state.modelId + '&motion=' + ui['motion-select'].value;
-  showLoading(state.dataset === 'public' && state.mode === 'full' ? 'Loading all 33,271 frames…' : state.dataset === 'lerobot' && state.mode === 'lerobot-full' ? 'Loading all 149,985 LeRobot frames…' : 'Loading motion data…');
+  showLoading(state.mode === 'full' ? 'Loading all 33,271 frames…' : 'Loading motion data…');
   try {
     const data = await getJson(url); if (token !== state.loadToken) return;
     state.trajectory = data; state.frames = prepareFrames(data); state.durationMs = state.frames.at(-1).playTMs; state.timeMs = 0;
     ui.timeline.max = String(Math.max(1, state.durationMs)); ui.timeline.value = '0'; ui.duration.textContent = formatTime(state.durationMs);
-    state.speed = state.dataset === 'public' && state.mode === 'full' || state.dataset === 'lerobot' && state.mode === 'lerobot-full' ? 10 : 1; ui.speed.value = String(state.speed);
-    updateSource(data.source); clearTrail(); applyFrame(state.frames[0]); hideLoading();
-    ui['data-status'].textContent = data.frames.length.toLocaleString() + ' frames ready';
+    state.speed = state.mode === 'full' ? 10 : 1; ui.speed.value = String(state.speed);
+    computeChartMetadata(); resetChartView(); updateSource(data.source); clearTrail(); applyFrame(state.frames[0]); updateScenarioLabel({ meta: state.frames[0] }); hideLoading();
+    ui['data-status'].textContent = data.frames.length.toLocaleString() + ' frames ready' + (usesPublicRetarget() ? ' · retargeted' : '');
     if (!reduceMotion) play(); else pause(); drawChart(true);
   } catch (error) { if (token === state.loadToken) { hideLoading(); showError(error.message); ui['data-status'].textContent = error.code || 'Load failed'; } }
 }
@@ -322,14 +328,23 @@ function frameAt(time) {
 
 function applyFrame(frame) {
   if (!frame || !state.robot) return;
-  if (state.dataset === 'lerobot') {
-    target.visible = true;
-    target.position.set(frame.state[0], frame.state[1], frame.state[2]);
-    solveIk(target.position);
-  } else {
-    target.visible = state.targetVisible;
-    setPose(frame.joints);
-  }
+  target.visible = state.targetVisible;
+  setPose(retargetPublicPose(frame.joints));
+}
+
+function usesPublicRetarget() {
+  return state.mode !== 'studio' && Boolean(state.robot && state.robot.model.publicMotionRange);
+}
+
+function retargetPublicPose(values) {
+  const ranges = state.robot && state.robot.model.publicMotionRange;
+  if (!usesPublicRetarget() || !ranges) return values;
+  return ranges.map((targetRange, index) => {
+    const sourceRange = PUBLIC_MOTION_RANGE[index];
+    const sourceDegrees = Number(values[index] || 0) * RAD;
+    const amount = clamp((sourceDegrees - sourceRange[0]) / (sourceRange[1] - sourceRange[0]), 0, 1);
+    return (targetRange[0] + (targetRange[1] - targetRange[0]) * amount) * DEG;
+  });
 }
 
 function animate(now) {
@@ -339,8 +354,8 @@ function animate(now) {
     if (state.timeMs >= state.durationMs) state.timeMs = 0;
     const frame = frameAt(state.timeMs);
     applyFrame(frame);
-    ui.timeline.value = String(Math.round(state.timeMs)); ui['current-time'].textContent = formatTime(state.timeMs);
-    ui['scenario-label'].textContent = state.dataset === 'public' ? (state.mode === 'full' ? 'Participant ' + frame.meta.user + ' · Scenario ' + frame.meta.task : state.mode === 'scenario' ? 'Participant ' + frame.meta.user + ' · Scenario ' + frame.meta.task : frame.meta.scenario) : 'Episode ' + frame.meta.episode + ' · Frame ' + frame.meta.frame;
+    ui.timeline.value = String(Math.round(state.timeMs)); ui['current-time'].textContent = formatTime(state.timeMs); updateScenarioLabel(frame);
+    if (state.chartFollow && chartWindowMs() < state.durationMs) centerChartOn(state.timeMs);
     updatePart(); addTrailPoint(); if (now - state.lastChartAt > 100) { drawChart(); state.lastChartAt = now; }
   }
   orbit.update(); renderer.render(scene, camera);
@@ -357,16 +372,325 @@ function updatePart() {
 function addTrailPoint() { if (!state.robot) return; const p=state.robot.tool.getWorldPosition(new THREE.Vector3()); if(!state.trail.length||p.distanceTo(state.trail.at(-1))>.008){state.trail.push(p);if(state.trail.length>160)state.trail.shift();const attribute=trailLine.geometry.getAttribute('position');state.trail.forEach((point,index)=>attribute.setXYZ(index,point.x,point.y,point.z));attribute.needsUpdate=true;trailLine.geometry.setDrawRange(0,state.trail.length);} }
 function clearTrail() { state.trail=[]; if(trailLine)trailLine.geometry.setDrawRange(0,0); }
 
-function drawChart(force) {
+function chartValues(frame) { return frame.joints; }
+function chartSeriesCount() { return state.robot.joints.length; }
+function chartWindowMs() { return Math.max(0, state.chartEndMs - state.chartStartMs); }
+function minimumChartWindow() { return Math.min(Math.max(0, state.durationMs), CHART_MIN_WINDOW_MS); }
+function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+
+function formatChartTime(ms) {
+  const total = Math.max(0, Math.round(ms));
+  const hours = Math.floor(total / 3600000);
+  const minutes = Math.floor(total % 3600000 / 60000);
+  const seconds = Math.floor(total % 60000 / 1000);
+  const millis = total % 1000;
+  return (hours ? String(hours).padStart(2, '0') + ':' : '') + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0') + '.' + String(millis).padStart(3, '0');
+}
+
+function setChartFollow(enabled) {
+  state.chartFollow = Boolean(enabled);
+  ui['chart-follow'].classList.toggle('active', state.chartFollow);
+  ui['chart-follow'].setAttribute('aria-pressed', String(state.chartFollow));
+}
+
+function updateChartReadout() {
+  const duration = Math.max(0, state.durationMs);
+  const span = Math.max(1, chartWindowMs());
+  const zoom = duration ? duration / span : 1;
+  ui['chart-current'].textContent = formatChartTime(state.timeMs);
+  ui['chart-range'].textContent = formatChartTime(state.chartStartMs) + ' – ' + formatChartTime(state.chartEndMs) + ' · ' + zoom.toFixed(1) + '×';
+  const disabled = !state.frames.length;
+  ui['chart-zoom-out'].disabled = disabled || span >= duration;
+  ui['chart-zoom-in'].disabled = disabled || span <= minimumChartWindow();
+  ui['chart-reset'].disabled = disabled;
+  ui['chart-follow'].disabled = disabled;
+}
+
+function setChartView(startMs, endMs, manual) {
+  const duration = Math.max(0, state.durationMs);
+  if (!duration) {
+    state.chartStartMs = 0; state.chartEndMs = 0;
+    updateChartReadout(); return;
+  }
+  let span = clamp(endMs - startMs, minimumChartWindow(), duration);
+  let start = clamp(startMs, 0, duration - span);
+  if (endMs > duration && startMs >= 0) start = duration - span;
+  state.chartStartMs = start;
+  state.chartEndMs = start + span;
+  if (manual) setChartFollow(false);
+  updateChartReadout();
+}
+
+function centerChartOn(timeMs) {
+  const span = chartWindowMs() || state.durationMs;
+  const start = clamp(timeMs - span / 2, 0, Math.max(0, state.durationMs - span));
+  state.chartStartMs = start; state.chartEndMs = start + span;
+}
+
+function resetChartView() {
+  state.chartStartMs = 0;
+  state.chartEndMs = Math.max(0, state.durationMs);
+  state.chartHoverMs = null;
+  ui['chart-tooltip'].hidden = true;
+  setChartFollow(true);
+  updateChartReadout();
+}
+
+function zoomChart(factor, anchorMs, manual) {
+  if (!state.durationMs) return;
+  const oldSpan = chartWindowMs() || state.durationMs;
+  const newSpan = clamp(oldSpan / factor, minimumChartWindow(), state.durationMs);
+  const anchor = clamp(anchorMs, state.chartStartMs, state.chartEndMs);
+  const portion = oldSpan ? (anchor - state.chartStartMs) / oldSpan : .5;
+  setChartView(anchor - newSpan * portion, anchor + newSpan * (1 - portion), manual);
+  if (!manual && state.chartFollow) centerChartOn(anchorMs);
+  drawChart();
+}
+
+function lowerFrameIndex(timeMs) {
+  let low = 0, high = state.frames.length;
+  while (low < high) { const mid = Math.floor((low + high) / 2); if (state.frames[mid].playTMs < timeMs) low = mid + 1; else high = mid; }
+  return Math.min(low, state.frames.length - 1);
+}
+
+function nearestFrameIndex(timeMs) {
+  const next = lowerFrameIndex(timeMs);
+  const previous = Math.max(0, next - 1);
+  return Math.abs(state.frames[next].playTMs - timeMs) < Math.abs(state.frames[previous].playTMs - timeMs) ? next : previous;
+}
+
+function computeChartMetadata() {
+  state.chartMaxAbs = Math.PI * 1.25;
+}
+
+function sizeChartCanvas(canvas, force) {
+  const rect = canvas.getBoundingClientRect();
+  const ratio = Math.min(devicePixelRatio, 1.5);
+  const width = Math.max(300, Math.round(rect.width * ratio));
+  const height = Math.max(1, Math.round(rect.height * ratio));
+  if (force || canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+  return { rect, ratio, width, height };
+}
+
+function drawSeries(context, width, plotHeight, startMs, endMs, startIndex, endIndex, step, alpha) {
+  const span = Math.max(1, endMs - startMs);
+  context.globalAlpha = alpha;
+  for (let series = 0; series < chartSeriesCount(); series++) {
+    context.strokeStyle = colors[series]; context.lineWidth = 1.35; context.beginPath();
+    let first = true;
+    for (let index = startIndex; index <= endIndex; index += step) {
+      const frame = state.frames[index];
+      const x = (frame.playTMs - startMs) / span * width;
+      const y = plotHeight / 2 - (chartValues(frame)[series] || 0) / state.chartMaxAbs * plotHeight * .43;
+      if (first) { context.moveTo(x, y); first = false; } else context.lineTo(x, y);
+    }
+    if ((endIndex - startIndex) % step) {
+      const frame = state.frames[endIndex];
+      context.lineTo((frame.playTMs - startMs) / span * width, plotHeight / 2 - (chartValues(frame)[series] || 0) / state.chartMaxAbs * plotHeight * .43);
+    }
+    context.stroke();
+  }
+  context.globalAlpha = 1;
+}
+
+function drawOverview(force) {
   if (!state.frames.length || !state.robot) return;
-  const canvas=ui['joint-chart'],rect=canvas.getBoundingClientRect(),ratio=Math.min(devicePixelRatio,1.5),w=Math.max(300,Math.round(rect.width*ratio)),h=Math.round(rect.height*ratio);
-  if(force||canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}const c=canvas.getContext('2d');c.clearRect(0,0,w,h);c.strokeStyle='#273036';c.lineWidth=1;for(let y=1;y<5;y++){c.beginPath();c.moveTo(0,y*h/5);c.lineTo(w,y*h/5);c.stroke()}
-  const step=Math.max(1,Math.floor(state.frames.length/w));
-  const values = (frame) => state.dataset === 'lerobot' ? frame.state : frame.joints;
-  const seriesCount = state.dataset === 'lerobot' ? 7 : state.robot.joints.length;
-  const maxAbs = state.dataset === 'lerobot' ? Math.max(1, ...state.frames.map((frame) => Math.max(...values(frame).map((value) => Math.abs(value))))) : Math.PI * 1.25;
-  for(let j=0;j<seriesCount;j++){c.strokeStyle=colors[j];c.lineWidth=1.4*ratio;c.beginPath();let first=true;for(let i=0;i<state.frames.length;i+=step){const f=state.frames[i],x=f.playTMs/state.durationMs*w,y=h/2-(values(f)[j]||0)/maxAbs*h*.43;if(first){c.moveTo(x,y);first=false}else c.lineTo(x,y)}c.stroke()}
-  c.strokeStyle='#fff';c.globalAlpha=.65;c.beginPath();c.moveTo(state.timeMs/state.durationMs*w,0);c.lineTo(state.timeMs/state.durationMs*w,h);c.stroke();c.globalAlpha=1;
+  const canvas = ui['chart-overview'];
+  const { ratio, width, height } = sizeChartCanvas(canvas, force);
+  const context = canvas.getContext('2d'); context.clearRect(0, 0, width, height);
+  const step = Math.max(1, Math.floor(state.frames.length / width));
+  drawSeries(context, width, height, 0, state.durationMs, 0, state.frames.length - 1, step, .48);
+  const startX = state.chartStartMs / Math.max(1, state.durationMs) * width;
+  const endX = state.chartEndMs / Math.max(1, state.durationMs) * width;
+  context.fillStyle = '#050708a8'; context.fillRect(0, 0, startX, height); context.fillRect(endX, 0, width - endX, height);
+  context.strokeStyle = '#5de4d3'; context.lineWidth = 1.5 * ratio; context.strokeRect(startX, .75 * ratio, Math.max(2 * ratio, endX - startX), height - 1.5 * ratio);
+  const playhead = state.timeMs / Math.max(1, state.durationMs) * width;
+  context.strokeStyle = '#fff'; context.globalAlpha = .9; context.beginPath(); context.moveTo(playhead, 0); context.lineTo(playhead, height); context.stroke(); context.globalAlpha = 1;
+}
+
+function drawChart(force) {
+  if (!state.frames.length || !state.robot) { updateChartReadout(); return; }
+  const canvas = ui['joint-chart'];
+  const { rect, ratio, width, height } = sizeChartCanvas(canvas, force);
+  const context = canvas.getContext('2d'); context.clearRect(0, 0, width, height);
+  const labelHeight = 19 * ratio, plotHeight = height - labelHeight;
+  context.strokeStyle = '#273036'; context.lineWidth = 1;
+  for (let row = 1; row < 5; row++) { context.beginPath(); context.moveTo(0, row * plotHeight / 5); context.lineTo(width, row * plotHeight / 5); context.stroke(); }
+  context.fillStyle = '#697278'; context.font = 8 * ratio + 'px ui-monospace, monospace';
+  const tickCount = rect.width < 520 ? 2 : 5;
+  for (let column = 0; column <= tickCount; column++) {
+    const x = column * width / tickCount;
+    context.strokeStyle = '#20272b'; context.beginPath(); context.moveTo(x, 0); context.lineTo(x, plotHeight); context.stroke();
+    context.textAlign = column === 0 ? 'left' : column === tickCount ? 'right' : 'center';
+    context.fillText(formatChartTime(state.chartStartMs + chartWindowMs() * column / tickCount), x, height - 5 * ratio);
+  }
+  const first = Math.max(0, lowerFrameIndex(state.chartStartMs) - 1);
+  const last = Math.min(state.frames.length - 1, lowerFrameIndex(state.chartEndMs) + 1);
+  const step = Math.max(1, Math.floor((last - first + 1) / width));
+  drawSeries(context, width, plotHeight, state.chartStartMs, state.chartEndMs, first, last, step, 1);
+  if (state.timeMs >= state.chartStartMs && state.timeMs <= state.chartEndMs) {
+    const x = (state.timeMs - state.chartStartMs) / Math.max(1, chartWindowMs()) * width;
+    context.strokeStyle = '#fff'; context.globalAlpha = .7; context.beginPath(); context.moveTo(x, 0); context.lineTo(x, plotHeight); context.stroke(); context.globalAlpha = 1;
+  }
+  if (state.chartHoverMs != null && state.chartHoverMs >= state.chartStartMs && state.chartHoverMs <= state.chartEndMs) {
+    const x = (state.chartHoverMs - state.chartStartMs) / Math.max(1, chartWindowMs()) * width;
+    context.strokeStyle = '#5de4d3'; context.globalAlpha = .75; context.beginPath(); context.moveTo(x, 0); context.lineTo(x, plotHeight); context.stroke(); context.globalAlpha = 1;
+  }
+  updateChartReadout(); drawOverview(force);
+}
+
+function updateScenarioLabel(frame) {
+  if (!frame || !frame.meta) return;
+  ui['scenario-label'].textContent = state.mode === 'full' || state.mode === 'scenario' ? 'Participant ' + frame.meta.user + ' · Scenario ' + frame.meta.task : frame.meta.scenario;
+}
+
+function seekPlayback(timeMs, shouldPause) {
+  if (!state.frames.length) return;
+  if (shouldPause) pause();
+  state.timeMs = clamp(timeMs, 0, state.durationMs);
+  ui.timeline.value = String(Math.round(state.timeMs));
+  ui['current-time'].textContent = formatTime(state.timeMs);
+  const frame = frameAt(state.timeMs); applyFrame(frame); updateScenarioLabel(frame);
+  if (state.chartFollow && chartWindowMs() < state.durationMs) centerChartOn(state.timeMs);
+  drawChart();
+}
+
+function showChartTooltip(clientX, clientY, timeMs) {
+  if (!state.frames.length) return;
+  const index = nearestFrameIndex(timeMs), frame = state.frames[index], values = chartValues(frame);
+  state.chartHoverMs = frame.playTMs;
+  const tooltip = ui['chart-tooltip']; tooltip.replaceChildren();
+  const title = document.createElement('strong'); title.textContent = formatChartTime(frame.playTMs); tooltip.appendChild(title);
+  const meta = document.createElement('span');
+  meta.textContent = frame.user ? 'Participant ' + frame.user + ' · Scenario ' + frame.task : 'Studio · ' + frame.scenario;
+  if (usesPublicRetarget()) meta.textContent += ' · iiwa source';
+  tooltip.appendChild(meta);
+  const labels = values.map((_, valueIndex) => 'J' + (valueIndex + 1));
+  labels.forEach((label, valueIndex) => {
+    const row = document.createElement('span');
+    row.textContent = label + '  ' + ((values[valueIndex] || 0) * RAD).toFixed(2) + '°';
+    row.style.color = colors[valueIndex]; tooltip.appendChild(row);
+  });
+  tooltip.hidden = false;
+  const viewportRect = ui['chart-viewport'].getBoundingClientRect();
+  const left = clientX - viewportRect.left + 12, top = clientY - viewportRect.top + 12;
+  tooltip.style.left = Math.max(6, Math.min(left, viewportRect.width - tooltip.offsetWidth - 6)) + 'px';
+  tooltip.style.top = Math.max(6, Math.min(top, viewportRect.height - tooltip.offsetHeight - 6)) + 'px';
+  drawChart();
+}
+
+function chartTimeAtClientX(canvas, clientX, startMs = state.chartStartMs, endMs = state.chartEndMs) {
+  const rect = canvas.getBoundingClientRect();
+  return startMs + clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1) * (endMs - startMs);
+}
+
+function beginChartPointer(event) {
+  const canvas = ui['joint-chart']; canvas.setPointerCapture(event.pointerId);
+  chartInteraction.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (chartInteraction.pointers.size === 1) {
+    chartInteraction.drag = { id: event.pointerId, x: event.clientX, start: state.chartStartMs, end: state.chartEndMs, moved: false };
+    chartInteraction.pinch = null;
+  } else {
+    const points = [...chartInteraction.pointers.values()];
+    const distance = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+    const midpointX = (points[0].x + points[1].x) / 2;
+    chartInteraction.drag = null;
+    chartInteraction.pinch = {
+      distance: Math.max(1, distance), span: chartWindowMs(),
+      anchor: chartTimeAtClientX(canvas, midpointX),
+      portion: clamp((midpointX - canvas.getBoundingClientRect().left) / Math.max(1, canvas.getBoundingClientRect().width), 0, 1)
+    };
+  }
+  canvas.classList.add('dragging'); ui['chart-tooltip'].hidden = true;
+}
+
+function moveChartPointer(event) {
+  const canvas = ui['joint-chart'];
+  if (!chartInteraction.pointers.has(event.pointerId)) {
+    if (event.pointerType === 'mouse' && !event.buttons) showChartTooltip(event.clientX, event.clientY, chartTimeAtClientX(canvas, event.clientX));
+    return;
+  }
+  chartInteraction.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (chartInteraction.pointers.size >= 2 && chartInteraction.pinch) {
+    const points = [...chartInteraction.pointers.values()];
+    const distance = Math.max(1, Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y));
+    const span = clamp(chartInteraction.pinch.span * chartInteraction.pinch.distance / distance, minimumChartWindow(), state.durationMs);
+    setChartView(chartInteraction.pinch.anchor - span * chartInteraction.pinch.portion, chartInteraction.pinch.anchor + span * (1 - chartInteraction.pinch.portion), true);
+    drawChart(); return;
+  }
+  const drag = chartInteraction.drag;
+  if (!drag || drag.id !== event.pointerId) return;
+  const deltaX = event.clientX - drag.x;
+  if (Math.abs(deltaX) > 3) drag.moved = true;
+  if (!drag.moved) return;
+  const deltaMs = -deltaX / Math.max(1, canvas.getBoundingClientRect().width) * (drag.end - drag.start);
+  setChartView(drag.start + deltaMs, drag.end + deltaMs, true); drawChart();
+}
+
+function endChartPointer(event, cancelled) {
+  const canvas = ui['joint-chart'];
+  const drag = chartInteraction.drag;
+  const tap = !cancelled && drag && drag.id === event.pointerId && !drag.moved && chartInteraction.pointers.size === 1;
+  chartInteraction.pointers.delete(event.pointerId);
+  if (!chartInteraction.pointers.size) {
+    canvas.classList.remove('dragging'); chartInteraction.drag = null; chartInteraction.pinch = null;
+  }
+  if (tap) {
+    const time = chartTimeAtClientX(canvas, event.clientX); seekPlayback(time, true); showChartTooltip(event.clientX, event.clientY, time);
+  }
+}
+
+function bindChartEvents() {
+  const canvas = ui['joint-chart'], overview = ui['chart-overview'];
+  canvas.addEventListener('pointerdown', beginChartPointer);
+  canvas.addEventListener('pointermove', moveChartPointer);
+  canvas.addEventListener('pointerup', (event) => endChartPointer(event, false));
+  canvas.addEventListener('pointercancel', (event) => endChartPointer(event, true));
+  canvas.addEventListener('pointerleave', () => {
+    if (chartInteraction.pointers.size) return;
+    state.chartHoverMs = null; ui['chart-tooltip'].hidden = true; drawChart();
+  });
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const factor = clamp(Math.exp(-event.deltaY * .002), .5, 2);
+    zoomChart(factor, chartTimeAtClientX(canvas, event.clientX), true);
+  }, { passive: false });
+  canvas.addEventListener('keydown', (event) => {
+    const center = state.chartFollow ? state.timeMs : (state.chartStartMs + state.chartEndMs) / 2;
+    if (event.key === '+' || event.key === '=') zoomChart(CHART_ZOOM_FACTOR, center, false);
+    else if (event.key === '-') zoomChart(1 / CHART_ZOOM_FACTOR, center, false);
+    else if (event.key === 'Home' || event.key === '0') { resetChartView(); drawChart(); }
+    else if (event.key.toLowerCase() === 'f') { setChartFollow(!state.chartFollow); if (state.chartFollow) centerChartOn(state.timeMs); drawChart(); }
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      const delta = chartWindowMs() * .1 * (event.key === 'ArrowLeft' ? -1 : 1);
+      setChartView(state.chartStartMs + delta, state.chartEndMs + delta, true); drawChart();
+    } else return;
+    event.preventDefault();
+  });
+
+  overview.addEventListener('pointerdown', (event) => {
+    if (!state.durationMs) return;
+    overview.setPointerCapture(event.pointerId); overview.classList.add('dragging');
+    const rect = overview.getBoundingClientRect();
+    const pointerTime = clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1) * state.durationMs;
+    const inside = pointerTime >= state.chartStartMs && pointerTime <= state.chartEndMs;
+    if (!inside) setChartView(pointerTime - chartWindowMs() / 2, pointerTime + chartWindowMs() / 2, true);
+    chartInteraction.overviewDrag = { id: event.pointerId, x: event.clientX, start: state.chartStartMs, end: state.chartEndMs };
+    drawChart();
+  });
+  overview.addEventListener('pointermove', (event) => {
+    const drag = chartInteraction.overviewDrag; if (!drag || drag.id !== event.pointerId) return;
+    const delta = (event.clientX - drag.x) / Math.max(1, overview.getBoundingClientRect().width) * state.durationMs;
+    setChartView(drag.start + delta, drag.end + delta, true); drawChart();
+  });
+  const endOverview = (event) => { if (!chartInteraction.overviewDrag || chartInteraction.overviewDrag.id !== event.pointerId) return; chartInteraction.overviewDrag = null; overview.classList.remove('dragging'); };
+  overview.addEventListener('pointerup', endOverview); overview.addEventListener('pointercancel', endOverview);
+
+  ui['chart-zoom-in'].addEventListener('click', () => zoomChart(CHART_ZOOM_FACTOR, state.chartFollow ? state.timeMs : (state.chartStartMs + state.chartEndMs) / 2, false));
+  ui['chart-zoom-out'].addEventListener('click', () => zoomChart(1 / CHART_ZOOM_FACTOR, state.chartFollow ? state.timeMs : (state.chartStartMs + state.chartEndMs) / 2, false));
+  ui['chart-reset'].addEventListener('click', () => { resetChartView(); drawChart(); });
+  ui['chart-follow'].addEventListener('click', () => { setChartFollow(!state.chartFollow); if (state.chartFollow) centerChartOn(state.timeMs); drawChart(); });
+  updateChartReadout();
 }
 
 function play(){if(!state.frames.length)return;state.playing=true;ui.play.innerHTML='<span>Ⅱ</span>';ui.play.setAttribute('aria-label','Pause playback');ui['manual-state'].textContent='PLAYBACK'}
@@ -375,11 +699,10 @@ function formatTime(ms){const total=Math.max(0,Math.round(ms/1000)),hours=Math.f
 function showLoading(text){ui.loading.hidden=false;ui['loading-detail'].textContent=text;ui['stage-error'].hidden=true}
 function hideLoading(){ui.loading.hidden=true}
 function showError(message){ui['stage-error'].hidden=false;ui['stage-error'].querySelector('span').textContent=message}
-function updateSource(source){ui['source-title'].textContent=source.title;const publicData=source.kind==='public-recording';ui['source-link'].textContent=publicData?'CC BY 4.0 · DOI '+source.doi+' ↗':'MIT · Hugging Face dataset ↗';ui['source-link'].href=publicData?'https://doi.org/'+source.doi:source.source}
+function updateSource(source){ui['source-title'].textContent=source.title;const publicData=source.kind==='public-recording';ui['source-link'].textContent=publicData?'CC BY 4.0 · DOI '+source.doi+' ↗':'Generated motion · project data';ui['source-link'].href=publicData?'https://doi.org/'+source.doi:'./third-party.html'}
 function resize(){if(!renderer)return;const rect=ui.stage.getBoundingClientRect();renderer.setSize(rect.width,rect.height,false);camera.aspect=rect.width/rect.height;camera.updateProjectionMatrix();drawChart(true)}
 
 async function selectModel(modelId) {
-  if (state.dataset !== 'public' && modelId !== 'iiwa7-r800') { await loadDataset('public'); return; }
   state.modelId=modelId;document.querySelectorAll('.model-card').forEach((card)=>card.classList.toggle('active',card.dataset.model===modelId));
   const meta=(await getJson('./api/robots')).models.find((item)=>item.id===modelId);ui['robot-name'].textContent=meta.name;ui['robot-spec'].textContent=meta.dof+' axes · '+meta.payloadKg+' kg payload · '+meta.reachMm+' mm reach';
   const built=await buildRobot(modelId);if(!built||state.modelId!==modelId)return;
@@ -387,51 +710,25 @@ async function selectModel(modelId) {
 }
 
 function updateModePanels(){
-  const publicDataset = state.dataset === 'public';
-  document.querySelectorAll('.mode-tabs button').forEach((button) => { button.disabled = !publicDataset; });
-  ['full','scenario','studio'].forEach((mode)=>{document.querySelector('[data-mode="'+mode+'"]').classList.toggle('active',publicDataset&&state.mode===mode);ui[mode+'-options'].hidden=!publicDataset||state.mode!==mode});
-  ui['lerobot-options'].hidden=state.dataset!=='lerobot';
-  ui['mode-label'].textContent=state.dataset==='lerobot'?(state.mode==='lerobot-full'?'LEROBOT FULL':'LEROBOT EPISODE'):state.mode==='full'?'FULL DATASET':state.mode==='scenario'?'SCENARIO':'STUDIO MOTION';
+  ['full','scenario','studio'].forEach((mode)=>{document.querySelector('[data-mode="'+mode+'"]').classList.toggle('active',state.mode===mode);ui[mode+'-options'].hidden=state.mode!==mode});
+  ui['mode-label'].textContent=state.mode==='full'?'FULL DATASET':state.mode==='scenario'?'SCENARIO':'STUDIO MOTION';
 }
-async function setMode(mode){if((mode==='full'||mode==='scenario')&&state.modelId!=='iiwa7-r800'){state.mode=mode;updateModePanels();await selectModel('iiwa7-r800');return}state.mode=mode;updateModePanels();await loadTrajectory()}
-
-async function loadDataset(dataset) {
-  state.dataset = dataset;
-  ui['hero-stats'].textContent = dataset === 'public' ? '33,271 FRAMES · 450 HUMAN-GUIDED SCENARIOS' : '149,985 CARTESIAN POSES · 3,000 PEG INSERTION EPISODES';
-  ui['chart-title'].textContent = dataset === 'lerobot' ? 'Cartesian pose state' : 'Motion signature';
-  updateChartLegend();
-  document.querySelectorAll('.dataset-tabs button').forEach((button) => button.classList.toggle('active', button.dataset.dataset === dataset));
-  state.loadToken++;
-  if (dataset === 'public') {
-    document.querySelectorAll('.model-card').forEach((card) => card.disabled = false);
-    state.mode = 'full'; state.speed = 10; updateModePanels();
-    if (state.modelId !== 'iiwa7-r800') await selectModel('iiwa7-r800'); else await loadTrajectory();
-    return;
-  }
-  document.querySelectorAll('.model-card').forEach((card) => card.classList.toggle('active', card.dataset.model === 'iiwa7-r800'));
-  if (state.modelId !== 'iiwa7-r800') { state.modelId = 'iiwa7-r800'; await buildRobot(state.modelId); }
-  const iiwaMeta = (await getJson('./api/robots')).models.find((item) => item.id === 'iiwa7-r800');
-  ui['robot-name'].textContent = iiwaMeta.name; ui['robot-spec'].textContent = iiwaMeta.dof + ' axes · ' + iiwaMeta.payloadKg + ' kg payload · ' + iiwaMeta.reachMm + ' mm reach';
-  state.mode = 'lerobot'; updateModePanels();
-  try {
-    const data = await getJson('./api/lerobot/episodes'); state.lerobotEpisodes = data.episodes;
-    ui['lerobot-episode'].replaceChildren(); data.episodes.forEach((item) => ui['lerobot-episode'].add(new Option('Episode ' + item.id + ' · ' + item.frameCount + ' frames', item.id)));
-    ui['lerobot-info'].textContent = data.episodeCount + ' episodes · ' + data.frameCount.toLocaleString() + ' Cartesian poses available. Robot joints are reconstructed with IK.';
-    await loadTrajectory();
-  } catch (error) { ui['data-status'].textContent = error.code || 'LeRobot not loaded'; showError(error.message); }
+async function setMode(mode) {
+  // An explicit playback-mode choice preserves the robot selected by the user.
+  state.mode = mode;
+  updateModePanels();
+  await loadTrajectory();
 }
 
 function bindEvents(){
+  bindChartEvents();
   document.querySelectorAll('.model-card').forEach((card)=>card.addEventListener('click',()=>selectModel(card.dataset.model)));
-  document.querySelectorAll('.dataset-tabs button').forEach((button)=>button.addEventListener('click',()=>loadDataset(button.dataset.dataset)));
   document.querySelectorAll('.mode-tabs button').forEach((button)=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
   ui.play.addEventListener('click',()=>state.playing?pause():play());ui.speed.addEventListener('change',()=>{state.speed=Number(ui.speed.value)});
-  ui.timeline.addEventListener('input',()=>{pause();state.timeMs=Number(ui.timeline.value);const frame=frameAt(state.timeMs);if(frame)applyFrame(frame);drawChart()});
-  ui['skip-idle'].addEventListener('change',()=>{if(state.trajectory){state.frames=prepareFrames(state.trajectory);state.durationMs=state.frames.at(-1).playTMs;ui.timeline.max=state.durationMs;ui.duration.textContent=formatTime(state.durationMs);state.timeMs=0;drawChart(true)}});
+  ui.timeline.addEventListener('input',()=>seekPlayback(Number(ui.timeline.value),true));
+  ui['skip-idle'].addEventListener('change',()=>{if(state.trajectory){state.frames=prepareFrames(state.trajectory);state.durationMs=state.frames.at(-1).playTMs;ui.timeline.max=state.durationMs;ui.duration.textContent=formatTime(state.durationMs);state.timeMs=0;computeChartMetadata();resetChartView();seekPlayback(0,false)}});
   ui['user-select'].addEventListener('change',()=>{updateScenarioInfo();if(state.mode==='scenario')loadTrajectory()});ui['task-select'].addEventListener('change',()=>{updateScenarioInfo();if(state.mode==='scenario')loadTrajectory()});
   ui['motion-select'].addEventListener('change',()=>{state.motion=ui['motion-select'].value;if(state.mode==='studio')loadTrajectory()});
-  ui['lerobot-episode'].addEventListener('change',()=>{state.mode='lerobot';updateModePanels();const item=state.lerobotEpisodes.find((x)=>x.id===Number(ui['lerobot-episode'].value));if(item)ui['lerobot-info'].textContent=item.frameCount+' frames · '+formatTime(item.durationMs);loadTrajectory()});
-  ui['lerobot-full'].addEventListener('click',()=>{state.mode='lerobot-full';updateModePanels();loadTrajectory()});
   ui['toggle-target'].addEventListener('click',()=>{state.targetVisible=!state.targetVisible;target.visible=state.targetVisible;transformHelper.visible=state.targetVisible;ui['toggle-target'].classList.toggle('active',state.targetVisible);if(state.targetVisible&&state.robot)target.position.copy(state.robot.tool.getWorldPosition(new THREE.Vector3()))});
   ui['reset-camera'].addEventListener('click',()=>setCamera(state.robot.model.camera,true));ui.retry.addEventListener('click',()=>selectModel(state.modelId));
 }

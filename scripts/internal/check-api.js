@@ -19,14 +19,8 @@ function orderedFrames(frames, dof) {
 }
 
 function run(base, reportFile) {
-  let datasetState = { lerobot: false };
   const checks = [
     { path: '/api/health', status: 200, verify: (body) => assert(body.ok && body.data.version === '0.2.0', 'missing app identity') },
-    { path: '/api/datasets', status: 200, verify: (body) => {
-      assert(body.ok && body.data.publicMotion === true, 'public motion data should be loaded');
-      assert(typeof body.data.lerobot === 'boolean' && Object.keys(body.data).sort().join(',') === 'lerobot,publicMotion', 'invalid dataset status');
-      datasetState = body.data;
-    } },
     { path: '/api/robots', status: 200, verify: (body) => {
       assert(body.ok && body.data.models.length === 3, 'expected three robot models');
       assert(body.data.playback.frameCount === 33271 && body.data.playback.scenarioCount === 450, 'unexpected dataset summary');
@@ -42,17 +36,6 @@ function run(base, reportFile) {
     { path: '/api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase', status: 200, verify: (body) => {
       assert(body.ok && body.data.frames.length === 121, 'unexpected showcase size');
       orderedFrames(body.data.frames, 6);
-    } },
-    { path: '/api/lerobot/episodes', status: () => datasetState.lerobot ? 200 : 404, verify: (body) => {
-      if (datasetState.lerobot) assert(body.ok && body.data.episodeCount === 3000 && body.data.frameCount === 149985, 'invalid LeRobot catalog');
-      else assert(body.error.code === 'LEROBOT_NOT_LOADED', 'expected LeRobot setup error');
-    } },
-    { path: '/api/lerobot/trajectory?episode=0', status: () => datasetState.lerobot ? 200 : 404, verify: (body) => {
-      if (datasetState.lerobot) {
-        assert(body.ok && body.data.frames.length > 0 && body.data.frames[0].state.length === 7, 'invalid LeRobot episode');
-        assert(body.data.source.stateLayout.join(',') === 'x,y,z,qx,qy,qz,qw', 'invalid LeRobot state layout');
-      }
-      else assert(body.error.code === 'LEROBOT_NOT_LOADED', 'expected LeRobot setup error');
     } },
     { path: '/api/trajectory?mode=full', status: 200, verify: (body) => {
       assert(body.ok && body.data.frames.length === 33271, 'full playback must contain every frame');

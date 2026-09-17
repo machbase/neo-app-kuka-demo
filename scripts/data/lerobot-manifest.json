@@ -1,9 +1,0 @@
-{
-  "name": "stanford-kuka-state.parquet",
-  "url": "https://huggingface.co/datasets/lerobot/stanford_kuka_multimodal_dataset/resolve/main/data/chunk-000/file-000.parquet",
-  "size": 8849485,
-  "sha256": "81e384f1173d6ffe9842e338ef10af203efd0fc848aaf17d7dc138c3a5002cab",
-  "rows": 149985,
-  "episodes": 3000,
-  "sampleRateHz": 20
-}

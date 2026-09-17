@@ -73,8 +73,6 @@ The package shortcuts are JSH `pkg run` commands:
 cd /work/neo-app-kuka-demo
 pkg run schema
 pkg run seed
-pkg run download-lerobot
-pkg run import-lerobot
 pkg run start
 pkg run check
 ```
@@ -95,67 +93,22 @@ The app reads `NEO_APP_DB_HOST`, `NEO_APP_DB_PORT`, `NEO_APP_DB_USER`, and
 `NEO_APP_DB_PASSWORD` from the JSH environment. Defaults are `127.0.0.1`, `5656`, `sys`,
 and `manager`. It does not load `.env` files.
 
-## Loading the larger datasets
-
-The compact LeRobot state/action Parquet is kept outside the repository and downloaded once
-from Hugging Face. The 31.98 GiB RLDS conversion and LeRobot videos are not used.
-
-### 1. Create the schema
-
-From the project root in JSH:
-
-```text
-cd /work/neo-app-kuka-demo
-./scripts/schema.js
-```
-
-This creates `NEO_APP_ROBOT_MOTION`, `NEO_APP_ROBOT_RUN`, and `NEO_APP_LEROBOT_MOTION`
-with `IF NOT EXISTS`; existing rows are preserved.
-
-### 2. Import LeRobot state and action rows
-
-Download the single 8,849,485-byte Parquet. It contains all 149,985 frames and 3,000 episodes
-sampled at 20 Hz:
-
-```text
-./scripts/download-lerobot.js
-```
-
-The default file is `/work/neo-app-kuka-demo/data/lerobot/stanford-kuka-state.parquet`, which Git
-ignores. Use `--dir` on the downloader and `--file` on the importer for another mounted location.
-Use a two-row database and parser smoke test first:
-
-```text
-./scripts/import-lerobot.js --limit 2
-```
-
-Then import the complete compact conversion:
-
-```text
-./scripts/import-lerobot.js
-```
-
-A completion marker is written only after all 149,985 rows succeed. A limited or failed run may
-leave partial rows, but the API never selects it for playback. `observation.state` is an
-end-effector pose `[x, y, z, qx, qy, qz, qw]`, not seven joint angles. `action` is
-`[dx, dy, dz, drx, dry, drz, gripper]`. The UI reconstructs one possible robot posture from XYZ
-with inverse kinematics because the source does not contain measured joint angles. The command
-does not download the 31.98 GiB RLDS data, videos, depth, or optical flow.
-
 ## Demo modes
 
 - **Full playback** loads every public frame and plays participants 1–30 automatically.
   Original participant-relative timestamps and scenario gaps are retained. “Skip long idle
   gaps” compresses only scenario transitions; disabling it restores the 1:42:21 timeline.
+  Explicitly selecting Full playback keeps the currently selected robot model. For KR 6 and
+  iisy, the source iiwa joint signals are retargeted into each model's safe Studio ranges while
+  the chart continues to display the source values.
 - **Scenario** selects one participant from 1–30 and one task from 1–15. Individual recordings
   range from about 3.1 to 15.8 seconds.
 - **Studio** plays the generated 12-second Axis Showcase or 10-second Pick & Place motion.
   Selecting KR 6 or iisy switches to Studio automatically.
-- **LeRobot** lets you select an episode or explicitly load all 149,985 Cartesian poses; XYZ is reconstructed with inverse kinematics.
-  This is not the 31.98 GiB RLDS conversion.
 
 The viewport supports orbit and zoom, 0.5×–10× playback, timeline seeking, joint sliders,
-an XYZ target with position IK, an end-effector trail, and a synchronized joint chart.
+an XYZ target with position IK, and an end-effector trail. Motion Signature supports time-axis
+zoom and pan, a full-range overview, playhead following, reset, and per-frame value inspection.
 Reduced-motion browser settings disable automatic playback.
 
 ## Public API
@@ -171,9 +124,6 @@ All responses use `{ "ok": true, "data": ... }` or
 | `GET /api/trajectory?mode=full` | All 33,271 recorded frames |
 | `GET /api/trajectory?mode=scenario&user=1&task=1` | One recorded scenario |
 | `GET /api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase` | One generated motion |
-| `GET /api/datasets` | Whether each dataset is loaded |
-| `GET /api/lerobot/episodes` | LeRobot episode catalog |
-| `GET /api/lerobot/trajectory?episode=0` | One LeRobot episode |
 
 Model, mode, user, task, and motion values are validated before database work. Database
 connection failures return `DB_UNAVAILABLE`; missing setup, incomplete runs, bad input, and

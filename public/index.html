@@ -33,11 +33,6 @@
       <button class="model-card" data-model="iisy3-r760"><span class="model-index">03</span><span><strong>LBR iisy 3 R760</strong><small>6 axes · collaborative</small></span></button>
     </section>
 
-    <nav class="dataset-tabs" aria-label="Data source">
-      <button class="active" data-dataset="public" type="button"><strong>Human-guided sessions</strong><small>33,271 frames · 450 scenarios</small></button>
-      <button data-dataset="lerobot" type="button"><strong>LeRobot peg insertion</strong><small>149,985 Cartesian poses · 3,000 episodes</small></button>
-    </nav>
-
     <section class="lab-shell">
       <div class="stage-panel">
         <div class="stage-toolbar">
@@ -87,12 +82,6 @@
           <p class="option-note">Generated poses remain inside conservative joint limits.</p>
         </div>
 
-        <div id="lerobot-options" class="mode-options" hidden>
-          <label>Episode<select id="lerobot-episode"></select></label>
-          <button id="lerobot-full" class="wide-button" type="button">Load all 149,985 frames</button>
-          <p id="lerobot-info" class="option-note">Choose an episode to reconstruct its XYZ end-effector path with inverse kinematics.</p>
-        </div>
-
         <details class="joint-deck" open>
           <summary><span>Joint control</span><small id="manual-state">PLAYBACK</small></summary>
           <div id="joint-controls" class="joint-controls"></div>
@@ -103,9 +92,24 @@
     </section>
 
     <section class="chart-panel">
-      <div><p class="eyebrow">JOINT TELEMETRY</p><h2 id="chart-title">Motion signature</h2></div>
+      <div class="chart-header">
+        <div><p class="eyebrow">JOINT TELEMETRY</p><h2 id="chart-title">Motion signature</h2></div>
+        <div class="chart-controls" aria-label="Motion signature navigation">
+          <div class="chart-readout"><strong id="chart-current">00:00</strong><span id="chart-range">00:00 – 00:00 · 1.0×</span></div>
+          <button id="chart-zoom-out" class="icon-button" type="button" aria-label="Zoom out motion signature">−</button>
+          <button id="chart-zoom-in" class="icon-button" type="button" aria-label="Zoom in motion signature">+</button>
+          <button id="chart-reset" class="icon-button" type="button">RESET</button>
+          <button id="chart-follow" class="icon-button active" type="button" aria-pressed="true">FOLLOW</button>
+        </div>
+      </div>
       <div class="chart-legend" id="chart-legend"></div>
-      <canvas id="joint-chart" height="210" aria-label="Joint angle timeline"></canvas>
+      <div id="chart-viewport" class="chart-viewport">
+        <canvas id="joint-chart" height="210" tabindex="0" aria-label="Interactive motion signature. Drag to move, use the mouse wheel or pinch to zoom, and click to seek."></canvas>
+        <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+      </div>
+      <div class="chart-overview-shell">
+        <canvas id="chart-overview" height="54" aria-label="Full motion overview. Drag the highlighted window to move through time."></canvas>
+      </div>
     </section>
 
     <footer><span>Built with Machbase Neo + JSH + Three.js</span><span>Simulation only · No hardware control</span><a href="./third-party.html">Licenses &amp; data sources</a></footer>
