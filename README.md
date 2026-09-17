@@ -42,8 +42,17 @@ cd /work/neo-app-kuka-demo
 ./scripts/seed.js
 ```
 
-`schema.js`는 `NEO_APP_ROBOT_MOTION`, `NEO_APP_ROBOT_RUN` TAG 테이블을 만들며 기존
-테이블과 데이터를 삭제하거나 변경하지 않습니다. 기존 `NEO_APP_SAMPLE`도 유지합니다.
+`schema.js`는 프레임 DATA와 태그 METADATA를 함께 관리하는 단일
+`NEO_APP_ROBOT_MOTION` TAG 테이블을 만들며 기존 데이터를 삭제하지 않습니다.
+
+이전 2테이블 schema에서 전환할 때는 서버를 멈추고 다음 명령을 한 번 실행합니다. 이 명령은
+이 앱의 `NEO_APP_ROBOT_MOTION`, `NEO_APP_ROBOT_RUN`, 과거 `NEO_APP_LEROBOT_MOTION`을
+삭제하고 단일 테이블을 다시 만듭니다. 다른 테이블은 삭제하지 않습니다.
+
+```text
+./scripts/migrate-tag-metadata.js --confirm
+./scripts/seed.js
+```
 
 `seed.js`는 실행할 때마다 다음을 새 실행으로 추가합니다.
 
@@ -69,6 +78,7 @@ cd /work/neo-app-kuka-demo/app
 ```text
 cd /work/neo-app-kuka-demo
 pkg run schema
+pkg run migrate-tag-metadata -- --confirm
 pkg run seed
 pkg run start
 pkg run check

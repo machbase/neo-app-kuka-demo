@@ -20,7 +20,7 @@ function orderedFrames(frames, dof) {
 
 function run(base, reportFile) {
   const checks = [
-    { path: '/api/health', status: 200, verify: (body) => assert(body.ok && body.data.version === '0.2.0', 'missing app identity') },
+    { path: '/api/health', status: 200, verify: (body) => assert(body.ok && body.data.version === '0.3.0', 'missing app identity') },
     { path: '/api/robots', status: 200, verify: (body) => {
       assert(body.ok && body.data.models.length === 3, 'expected three robot models');
       assert(body.data.playback.frameCount === 33271 && body.data.playback.scenarioCount === 450, 'unexpected dataset summary');

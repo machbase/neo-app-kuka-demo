@@ -27,8 +27,13 @@ cd /work/neo-app-kuka-demo
 ./scripts/seed.js
 ```
 
-`schema.js`は`NEO_APP_ROBOT_MOTION`と`NEO_APP_ROBOT_RUN`を作成し、既存テーブルを
-削除しません。`seed.js`は実行ごとに以下の新しい完了runを追加します。
+`schema.js`はフレームDATAとタグMETADATAを持つ単一の`NEO_APP_ROBOT_MOTION`を作成し、
+既存データは削除しません。旧schemaからの移行時だけ、サーバー停止後に次を実行します。
+
+```text
+./scripts/migrate-tag-metadata.js --confirm
+./scripts/seed.js
+```
 
 - 公開CSV 30ファイル：33,271フレーム、450シナリオ、元の間隔で約1時間42分21秒
 - 3モデルそれぞれの12秒Axis Showcaseと10秒Pick & Place
@@ -49,6 +54,7 @@ JSHの短縮コマンドも利用できます。
 ```text
 cd /work/neo-app-kuka-demo
 pkg run schema
+pkg run migrate-tag-metadata -- --confirm
 pkg run seed
 pkg run start
 pkg run check

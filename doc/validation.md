@@ -219,3 +219,34 @@ no console or page errors; the served UI contained no dataset selector or LeRobo
 This removal round did not run the JSH server or query the live database because the Neo executable
 path was not confirmed for this session. Route 404 behavior, the reduced eight-check JSH worker,
 and live schema output therefore remain unverified in this round.
+
+## 2026-09-17: Single TAG table with METADATA
+
+Neo 8.7.0 build `c4954cf0` was validated through
+`/home/sjkim2/work/neo/current/machbase-neo` against DB port `25656`. The explicit
+`migrate-tag-metadata.js --confirm` command dropped only `NEO_APP_ROBOT_MOTION`,
+`NEO_APP_ROBOT_RUN`, and the legacy `NEO_APP_LEROBOT_MOTION`, then created one
+`NEO_APP_ROBOT_MOTION` TAG table with DATA and METADATA areas. Running the migration without
+`--confirm` failed with exit code 1 and did not modify the database.
+
+The live seed inserted 33,937 DATA rows: 33,271 public frames and 666 generated Studio frames.
+The appender automatically registered 456 `MOTION` metadata entries from the metadata values
+supplied with each logical TAG row; one explicit metadata-only `RUN` completion marker was added
+after the appender closed. The marker recorded run `seed-1789650045341`, 33,271 public frames,
+450 scenarios, 6,140,545 ms, and the DATA-axis `START_TIME`/`END_TIME` bounds.
+Catalog inspection confirmed the old robot run and LeRobot tables were absent. Unrelated
+`NEO_APP_ROBOT_TORQUE` and `NEO_APP_SAMPLE` tables were not modified.
+
+A normal schema rerun preserved all 33,937 DATA rows and 457 METADATA rows. The live JSH checker
+passed all eight current API checks. Chromium `153.0.8010.12` loaded the live app and passed full
+33,271-frame playback, Studio playback, iisy retargeting, Motion Signature zoom, and the 375px
+layout without console or page errors.
+
+Every playback DATA query included both tag pruning and a BASETIME predicate. Full used the
+automatically indexed scalar metadata predicate `RUN_ID = ?`, with `TAG_KIND` and `SOURCE_KIND`
+filters; Scenario and Studio used exact `NAME` values. All three used
+`TIME BETWEEN START_TIME AND END_TIME`, and playback time came directly from `PLAYBACK_MS`.
+`EXPLAIN` showed `VOLATILE INDEX SCAN` on metadata with a `RUN_ID` key range, followed by a DATA
+`KEYVALUE INDEX SCAN` with the tag-ID `IN` set and `TIME BETWEEN` range. On localhost, Full
+returned 6,978,621 bytes in 2.84 seconds, User 1 / Task 1 returned 17,056 bytes in 0.017 seconds,
+and iisy Showcase returned 15,461 bytes in 0.028 seconds.

@@ -27,7 +27,14 @@ cd /work/neo-app-kuka-demo
 ./scripts/seed.js
 ```
 
-`schema.js` 创建 `NEO_APP_ROBOT_MOTION` 和 `NEO_APP_ROBOT_RUN`，不会删除或修改已有表。
+`schema.js` 创建一个同时包含帧 DATA 和标签 METADATA 的 `NEO_APP_ROBOT_MOTION`，不会
+删除现有数据。从旧 schema 迁移时，停止服务器后执行一次：
+
+```text
+./scripts/migrate-tag-metadata.js --confirm
+./scripts/seed.js
+```
+
 `seed.js` 每次执行都会新增一组完整数据：
 
 - 30 个公开 CSV：33,271 帧、450 个场景，保留原始间隔时约 1 小时 42 分 21 秒；
@@ -49,6 +56,7 @@ cd /work/neo-app-kuka-demo/app
 ```text
 cd /work/neo-app-kuka-demo
 pkg run schema
+pkg run migrate-tag-metadata -- --confirm
 pkg run seed
 pkg run start
 pkg run check

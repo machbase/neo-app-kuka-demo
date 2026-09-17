@@ -45,8 +45,17 @@ cd /work/neo-app-kuka-demo
 ./scripts/seed.js
 ```
 
-`schema.js` creates `NEO_APP_ROBOT_MOTION` and `NEO_APP_ROBOT_RUN` without dropping or
-changing existing tables. The previous `NEO_APP_SAMPLE` table, when present, is untouched.
+`schema.js` creates one `NEO_APP_ROBOT_MOTION` TAG table whose DATA and METADATA areas hold
+frames and tag attributes. It does not drop existing data.
+
+To replace the previous two-table schema, stop the server and run this destructive migration
+once. It drops this app's `NEO_APP_ROBOT_MOTION`, `NEO_APP_ROBOT_RUN`, and legacy
+`NEO_APP_LEROBOT_MOTION`, then creates the single table. It does not drop unrelated tables.
+
+```text
+./scripts/migrate-tag-metadata.js --confirm
+./scripts/seed.js
+```
 
 `seed.js` adds a new complete data run on every invocation:
 
@@ -72,6 +81,7 @@ The package shortcuts are JSH `pkg run` commands:
 ```text
 cd /work/neo-app-kuka-demo
 pkg run schema
+pkg run migrate-tag-metadata -- --confirm
 pkg run seed
 pkg run start
 pkg run check
