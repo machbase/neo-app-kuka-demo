@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>Neo Robot Motion Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    {"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}
+  </script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Neo Robot Motion Lab home"><span class="mark">N</span><span>MACHBASE NEO</span><span class="badge">ROBOT MOTION LAB</span></a>
+      <span id="server-status" class="server-status"><i></i> Checking server</span>
+    </header>
+
+    <section class="hero">
+      <div>
+        <p id="hero-stats" class="eyebrow">33,271 FRAMES · 450 HUMAN-GUIDED SCENARIOS</p>
+        <h1>Motion becomes<br><span>visible intelligence.</span></h1>
+      </div>
+      <p class="lead">Explore a complete KUKA LBR iiwa motion dataset, replay every recorded session, or take control of three robot models in a cinematic 3D cell.</p>
+    </section>
+
+    <section class="model-strip" aria-label="Robot models">
+      <button class="model-card active" data-model="iiwa7-r800"><span class="model-index">01</span><span><strong>LBR iiwa 7 R800</strong><small>7 axes · real motion data</small></span><em>LIVE DATA</em></button>
+      <button class="model-card" data-model="kr6-r900-2"><span class="model-index">02</span><span><strong>KR 6 R900-2</strong><small>6 axes · industrial</small></span></button>
+      <button class="model-card" data-model="iisy3-r760"><span class="model-index">03</span><span><strong>LBR iisy 3 R760</strong><small>6 axes · collaborative</small></span></button>
+    </section>
+
+    <nav class="dataset-tabs" aria-label="Data source">
+      <button class="active" data-dataset="public" type="button"><strong>Human-guided sessions</strong><small>33,271 frames · 450 scenarios</small></button>
+      <button data-dataset="lerobot" type="button"><strong>LeRobot peg insertion</strong><small>149,985 Cartesian poses · 3,000 episodes</small></button>
+    </nav>
+
+    <section class="lab-shell">
+      <div class="stage-panel">
+        <div class="stage-toolbar">
+          <div><span id="mode-label" class="status-chip">FULL DATASET</span><span id="scenario-label">All 30 participants</span></div>
+          <div class="toolbar-actions"><button id="toggle-target" class="icon-button" type="button" title="Toggle IK target">TARGET</button><button id="reset-camera" class="icon-button" type="button">RESET VIEW</button></div>
+        </div>
+        <div id="stage" class="stage">
+          <canvas id="robot-canvas" aria-label="Interactive three-dimensional robot arm"></canvas>
+          <div class="stage-vignette"></div>
+          <div id="loading" class="loading-card"><span class="spinner"></span><strong>Loading robot cell</strong><small id="loading-detail">Preparing 3D assets…</small></div>
+          <div id="stage-error" class="stage-error" hidden><strong>Unable to open the robot cell</strong><span></span><button id="retry" type="button">Retry</button></div>
+          <div class="axis-key"><span class="x">X</span><span class="y">Y</span><span class="z">Z</span></div>
+          <div class="stage-metrics">
+            <div><small>END EFFECTOR</small><strong id="tool-position">—</strong></div>
+            <div><small>DATA STATUS</small><strong id="data-status">Loading</strong></div>
+          </div>
+        </div>
+        <div class="transport">
+          <button id="play" class="play-button" type="button" aria-label="Pause playback"><span>Ⅱ</span></button>
+          <div class="timeline-block"><input id="timeline" type="range" min="0" max="1000" value="0" aria-label="Playback position"><div><span id="current-time">00:00</span><span id="duration">00:00</span></div></div>
+          <select id="speed" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10" selected>10×</option></select>
+        </div>
+      </div>
+
+      <aside class="control-panel">
+        <div class="control-heading"><p class="eyebrow">CONTROL DECK</p><h2 id="robot-name">LBR iiwa 7 R800</h2><p id="robot-spec">7 axes · 7 kg payload · 800 mm reach</p></div>
+
+        <div class="mode-tabs" role="tablist" aria-label="Playback mode">
+          <button class="active" data-mode="full" role="tab">Full playback</button>
+          <button data-mode="scenario" role="tab">Scenario</button>
+          <button data-mode="studio" role="tab">Studio</button>
+        </div>
+
+        <div id="full-options" class="mode-options">
+          <div class="dataset-stat"><span><strong>30</strong><small>participants</small></span><span><strong>450</strong><small>scenarios</small></span><span><strong>1:42:21</strong><small>original time</small></span></div>
+          <label class="switch-row"><span><strong>Skip long idle gaps</strong><small>Compress pauses between scenarios</small></span><input id="skip-idle" type="checkbox" checked><i></i></label>
+        </div>
+
+        <div id="scenario-options" class="mode-options" hidden>
+          <label>Participant<select id="user-select"></select></label>
+          <label>Scenario<select id="task-select"></select></label>
+          <p id="scenario-info" class="option-note">Choose one of 450 recorded interactions.</p>
+        </div>
+
+        <div id="studio-options" class="mode-options" hidden>
+          <label>Motion<select id="motion-select"><option value="showcase">Axis Showcase · 12 s</option><option value="pick-place">Pick & Place · 10 s</option></select></label>
+          <p class="option-note">Generated poses remain inside conservative joint limits.</p>
+        </div>
+
+        <div id="lerobot-options" class="mode-options" hidden>
+          <label>Episode<select id="lerobot-episode"></select></label>
+          <button id="lerobot-full" class="wide-button" type="button">Load all 149,985 frames</button>
+          <p id="lerobot-info" class="option-note">Choose an episode to reconstruct its XYZ end-effector path with inverse kinematics.</p>
+        </div>
+
+        <details class="joint-deck" open>
+          <summary><span>Joint control</span><small id="manual-state">PLAYBACK</small></summary>
+          <div id="joint-controls" class="joint-controls"></div>
+        </details>
+
+        <div class="source-card"><span class="source-pulse"></span><div><small>DATA SOURCE</small><strong id="source-title">Dataset for Collaborative Robotics</strong><a id="source-link" href="https://doi.org/10.17632/4fr33dkrjt.3" target="_blank" rel="noreferrer">CC BY 4.0 · DOI 10.17632/4fr33dkrjt.3 ↗</a></div></div>
+      </aside>
+    </section>
+
+    <section class="chart-panel">
+      <div><p class="eyebrow">JOINT TELEMETRY</p><h2 id="chart-title">Motion signature</h2></div>
+      <div class="chart-legend" id="chart-legend"></div>
+      <canvas id="joint-chart" height="210" aria-label="Joint angle timeline"></canvas>
+    </section>
+
+    <footer><span>Built with Machbase Neo + JSH + Three.js</span><span>Simulation only · No hardware control</span><a href="./third-party.html">Licenses &amp; data sources</a></footer>
+    <noscript>Enable JavaScript in your browser to use this app.</noscript>
+  </main>
+</body>
+</html>
