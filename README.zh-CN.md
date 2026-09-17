@@ -15,14 +15,14 @@
 
 ```sh
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
   -e NEO_APP_DB_PORT=5656
 ```
 
 在 JSH 中创建表并载入全部数据：
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ./scripts/seed.js
 ```
@@ -38,7 +38,7 @@ TAG 写入不支持 transaction rollback。失败时可能留下部分行，但�
 不会选择该次运行。
 
 ```text
-cd /work/neo-app-starter/app
+cd /work/neo-app-kuka-demo/app
 ./server.js --host 127.0.0.1 --port 56802
 ```
 
@@ -47,7 +47,7 @@ cd /work/neo-app-starter/app
 也可以使用 JSH 的 `pkg run`：
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 pkg run schema
 pkg run seed
 pkg run download-lerobot
@@ -68,7 +68,7 @@ DB 配置来自 `NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER` 和
 8,849,485 字节的 compact state/action Parquet。
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ./scripts/download-lerobot.js
 ./scripts/import-lerobot.js --limit 2

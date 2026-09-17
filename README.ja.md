@@ -15,14 +15,14 @@ OSシェルでJSHを起動します。
 
 ```sh
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
   -e NEO_APP_DB_PORT=5656
 ```
 
 JSHでスキーマと全データを準備します。
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ./scripts/seed.js
 ```
@@ -38,7 +38,7 @@ TAG入力にはtransaction rollbackがありません。途中で失敗した行
 完了マーカーがないためAPIから選択されません。
 
 ```text
-cd /work/neo-app-starter/app
+cd /work/neo-app-kuka-demo/app
 ./server.js --host 127.0.0.1 --port 56802
 ```
 
@@ -47,7 +47,7 @@ cd /work/neo-app-starter/app
 JSHの短縮コマンドも利用できます。
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 pkg run schema
 pkg run seed
 pkg run download-lerobot
@@ -68,7 +68,7 @@ DB接続は`NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER`、
 state/action ParquetだけをHugging Faceから一度ダウンロードします。
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ./scripts/download-lerobot.js
 ./scripts/import-lerobot.js --limit 2

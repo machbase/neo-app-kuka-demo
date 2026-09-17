@@ -28,16 +28,16 @@ OS 셸에서 `<NEO_EXECUTABLE> version`으로 Neo 제품 버전을 확인합니�
 OS 셸에서 저장소를 받은 뒤 프로젝트를 명시적으로 마운트해 JSH를 시작합니다.
 
 ```sh
-git clone <REPOSITORY_URL> neo-app-starter
+git clone https://github.com/machbase/neo-app-kuka-demo.git neo-app-kuka-demo
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
   -e NEO_APP_DB_PORT=5656
 ```
 
 JSH에서 스키마와 전체 데이터를 준비합니다.
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ./scripts/seed.js
 ```
@@ -58,7 +58,7 @@ TAG 입력은 transaction rollback을 지원하지 않습니다. 실패한 실�
 서버를 foreground로 실행합니다.
 
 ```text
-cd /work/neo-app-starter/app
+cd /work/neo-app-kuka-demo/app
 ./server.js --host 127.0.0.1 --port 56802
 ```
 
@@ -67,7 +67,7 @@ cd /work/neo-app-starter/app
 `package.json` 단축 명령은 JSH의 `pkg run`용입니다.
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 pkg run schema
 pkg run seed
 pkg run download-lerobot
@@ -83,9 +83,9 @@ OS 셸에서 바로 실행할 수도 있습니다.
 
 ```sh
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
   -e NEO_APP_DB_PORT=5656 \
-  /work/neo-app-starter/app/server.js --host 127.0.0.1 --port 56802
+  /work/neo-app-kuka-demo/app/server.js --host 127.0.0.1 --port 56802
 ```
 
 DB 설정은 JSH 환경의 `NEO_APP_DB_HOST`, `NEO_APP_DB_PORT`, `NEO_APP_DB_USER`,
@@ -103,7 +103,7 @@ LeRobot의 compact 상태·동작 Parquet는 기본 저장소에 포함하지 �
 JSH에서 프로젝트 루트로 이동한 뒤 실행합니다.
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ```
 
@@ -119,7 +119,7 @@ cd /work/neo-app-starter
 ./scripts/download-lerobot.js
 ```
 
-기본 저장 위치는 `/work/neo-app-starter/data/lerobot/stanford-kuka-state.parquet`이며 Git에
+기본 저장 위치는 `/work/neo-app-kuka-demo/data/lerobot/stanford-kuka-state.parquet`이며 Git에
 포함되지 않습니다. 다른 마운트에 저장하려면 다운로드에는 `--dir`, import에는 `--file`을
 사용합니다. 먼저 DB 연결과 파싱을 확인할 때는 2행만 적재합니다.
 
@@ -178,8 +178,8 @@ HTTP로 제공하지 않습니다.
 
 ```sh
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
-  /work/neo-app-starter/scripts/check.js --url http://127.0.0.1:56802
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
+  /work/neo-app-kuka-demo/scripts/check.js --url http://127.0.0.1:56802
 ```
 
 검사는 앱·모델·450개 시나리오, 실제 시나리오, 생성 동작, 전체 프레임과 순서·관절 수,

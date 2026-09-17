@@ -31,16 +31,16 @@ Clone the project in the OS shell, then start JSH with an explicit mount. Replac
 and DB port with the values for your installation.
 
 ```sh
-git clone <REPOSITORY_URL> neo-app-starter
+git clone https://github.com/machbase/neo-app-kuka-demo.git neo-app-kuka-demo
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
   -e NEO_APP_DB_PORT=5656
 ```
 
 Run schema and data setup from the project root inside JSH:
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ./scripts/seed.js
 ```
@@ -61,7 +61,7 @@ command reports the run ID and number of rows inserted before failure.
 Start the foreground server from the `app` directory:
 
 ```text
-cd /work/neo-app-starter/app
+cd /work/neo-app-kuka-demo/app
 ./server.js --host 127.0.0.1 --port 56802
 ```
 
@@ -70,7 +70,7 @@ Open **http://127.0.0.1:56802/**. Press `Ctrl+C` in JSH to stop the server.
 The package shortcuts are JSH `pkg run` commands:
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 pkg run schema
 pkg run seed
 pkg run download-lerobot
@@ -86,9 +86,9 @@ Neo 8.7.0 build rejects `--port` as a `pkg` option when the separator is omitted
 
 ```sh
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
   -e NEO_APP_DB_PORT=5656 \
-  /work/neo-app-starter/app/server.js --host 127.0.0.1 --port 56802
+  /work/neo-app-kuka-demo/app/server.js --host 127.0.0.1 --port 56802
 ```
 
 The app reads `NEO_APP_DB_HOST`, `NEO_APP_DB_PORT`, `NEO_APP_DB_USER`, and
@@ -105,7 +105,7 @@ from Hugging Face. The 31.98 GiB RLDS conversion and LeRobot videos are not used
 From the project root in JSH:
 
 ```text
-cd /work/neo-app-starter
+cd /work/neo-app-kuka-demo
 ./scripts/schema.js
 ```
 
@@ -121,7 +121,7 @@ sampled at 20 Hz:
 ./scripts/download-lerobot.js
 ```
 
-The default file is `/work/neo-app-starter/data/lerobot/stanford-kuka-state.parquet`, which Git
+The default file is `/work/neo-app-kuka-demo/data/lerobot/stanford-kuka-state.parquet`, which Git
 ignores. Use `--dir` on the downloader and `--file` on the importer for another mounted location.
 Use a two-row database and parser smoke test first:
 
@@ -186,8 +186,8 @@ With the server running, use another JSH process:
 
 ```sh
 <NEO_EXECUTABLE> jsh \
-  -v /work/neo-app-starter=/absolute/path/to/neo-app-starter \
-  /work/neo-app-starter/scripts/check.js --url http://127.0.0.1:56802
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
+  /work/neo-app-kuka-demo/scripts/check.js --url http://127.0.0.1:56802
 ```
 
 The checker validates app identity, three robot models, the 450-scenario catalog, an actual
