@@ -110,6 +110,10 @@ DB 설정은 JSH 환경의 `NEO_APP_DB_HOST`, `NEO_APP_DB_PORT`, `NEO_APP_DB_USE
 - **Scenario**: 사용자 1–30과 시나리오 1–15를 선택합니다. 개별 동작은 약 3.1–15.8초입니다.
 - **Studio**: 12초 Axis Showcase와 10초 Pick & Place를 재생합니다. KR 6 또는 iisy를
   선택하면 Studio로 자동 전환합니다.
+- **Teach**: 하드웨어 없이 XYZ IK 목표점이나 관절 슬라이더로 2–8개 자세를 캡처합니다.
+  Preview는 자세 사이를 10 Hz로 부드럽게 보간하고, `Save & Replay`는 완성된 시뮬레이션
+  동작을 Machbase에 저장합니다. 완료 마커가 기록된 동작만 모델별 Motion memory 목록에
+  나타나며 다시 불러올 수 있습니다. 실제 로봇을 제어하거나 실측한 동작이 아닙니다.
 
 카메라 회전·확대, 0.5×–10× 속도, 타임라인 탐색, 관절 슬라이더, XYZ IK 목표점과
 말단 궤적을 지원합니다. Motion Signature는 시간축 확대·이동, 전체 미니맵, 현재 위치 추적,
@@ -125,10 +129,15 @@ Reset과 프레임별 상세값 조회를 제공합니다. 브라우저가 reduc
 | `GET /api/trajectory?mode=full` | 실측 33,271프레임 전체 |
 | `GET /api/trajectory?mode=scenario&user=1&task=1` | 선택한 실측 시나리오 |
 | `GET /api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase` | 생성 동작 |
+| `GET /api/teach/motions?model=iiwa7-r800` | 저장된 관람객 시뮬레이션 동작 목록 |
+| `GET /api/teach/motion?id=<motion-id>` | 완료된 관람객 동작 재조회 |
+| `POST /api/teach/motions` | 2–8개 관절 자세를 검증·보간해 새 동작으로 저장 |
 
 응답은 `{ok:true,data}` / `{ok:false,error:{code,message}}` 형식입니다. 모델·모드·사용자·
 시나리오·동작을 DB 작업 전에 검증합니다. 원본 CSV, 서버 소스, 자격정보, Git 파일은
-HTTP로 제공하지 않습니다.
+HTTP로 제공하지 않습니다. TAG appender 직후 완료 마커보다 프레임 조회 가시성이 잠깐
+늦을 수 있으며, 이때 동작 재조회는 일시적인 `MOTION_NOT_READY`를 반환하고 브라우저는
+짧게 재시도합니다.
 
 ## 검증
 
@@ -141,7 +150,8 @@ HTTP로 제공하지 않습니다.
 ```
 
 검사는 앱·모델·450개 시나리오, 실제 시나리오, 생성 동작, 전체 프레임과 순서·관절 수,
-출처, 잘못된 입력의 실패를 확인합니다. 자세한 내용은 [검증 기록](doc/validation.md),
+출처, 잘못된 재생·Teach 입력의 실패를 확인합니다. 검사 자체는 관람객 동작을 저장하지
+않습니다. 자세한 내용은 [검증 기록](doc/validation.md),
 [호환성 정책](doc/compatibility.md), [외부 자료 고지](THIRD_PARTY_NOTICES.md)를 참고하세요.
 
 ## 데이터와 모델 라이선스

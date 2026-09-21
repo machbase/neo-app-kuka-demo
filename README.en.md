@@ -115,6 +115,10 @@ and `manager`. It does not load `.env` files.
   range from about 3.1 to 15.8 seconds.
 - **Studio** plays the generated 12-second Axis Showcase or 10-second Pick & Place motion.
   Selecting KR 6 or iisy switches to Studio automatically.
+- **Teach** captures 2–8 poses with the XYZ IK target or joint sliders, without hardware.
+  Preview smoothly interpolates the poses at 10 Hz; `Save & Replay` stores the completed
+  simulated motion in Machbase. Only motions with completion markers appear in the per-model
+  Motion memory list and can be recalled. These are simulated, not measured or hardware-controlled.
 
 The viewport supports orbit and zoom, 0.5×–10× playback, timeline seeking, joint sliders,
 an XYZ target with position IK, and an end-effector trail. Motion Signature supports time-axis
@@ -134,11 +138,16 @@ All responses use `{ "ok": true, "data": ... }` or
 | `GET /api/trajectory?mode=full` | All 33,271 recorded frames |
 | `GET /api/trajectory?mode=scenario&user=1&task=1` | One recorded scenario |
 | `GET /api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase` | One generated motion |
+| `GET /api/teach/motions?model=iiwa7-r800` | Completed visitor simulations for one model |
+| `GET /api/teach/motion?id=<motion-id>` | One completed visitor motion |
+| `POST /api/teach/motions` | Validate and interpolate 2–8 joint poses, then save the motion |
 
 Model, mode, user, task, and motion values are validated before database work. Database
 connection failures return `DB_UNAVAILABLE`; missing setup, incomplete runs, bad input, and
 query failures remain distinct errors. Raw CSV files, server source, credentials, and Git
-files are not exposed by the HTTP server.
+files are not exposed by the HTTP server. Immediately after an append, frame visibility may
+briefly lag behind the completion marker; recall then returns transient `MOTION_NOT_READY`,
+which the browser retries for a short bounded period.
 
 ## Validation
 
@@ -153,7 +162,8 @@ With the server running, use another JSH process:
 The checker validates app identity, three robot models, the 450-scenario catalog, an actual
 recorded scenario, a generated motion, all 33,271 full-playback frames, ordering, joint
 dimensions, source attribution, and invalid mode/scenario errors. It creates a temporary
-report under `.run/` and removes it after normal success or failure.
+report under `.run/` and removes it after normal success or failure. It also checks invalid
+Teach requests without creating a visitor motion.
 
 See [validation history](doc/validation.md), [compatibility policy](doc/compatibility.md),
 and [third-party notices](THIRD_PARTY_NOTICES.md).

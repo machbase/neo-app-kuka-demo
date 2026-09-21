@@ -250,3 +250,34 @@ filters; Scenario and Studio used exact `NAME` values. All three used
 `KEYVALUE INDEX SCAN` with the tag-ID `IN` set and `TIME BETWEEN` range. On localhost, Full
 returned 6,978,621 bytes in 2.84 seconds, User 1 / Task 1 returned 17,056 bytes in 0.017 seconds,
 and iisy Showcase returned 15,461 bytes in 0.028 seconds.
+
+## 2026-09-21: Visitor Teach motion memory
+
+Validation used `/home/sjkim2/work/neo/current/machbase-neo`, which reported Neo **8.7.0**,
+build **c4954cf0**, engine 8.7.0, Linux amd64. The existing Neo service remained on HTTP
+`127.0.0.1:25654` and DB `127.0.0.1:25656`. The app ran through standalone JSH with the explicit
+mount `/work/neo-app-kuka-demo=/home/sjkim2/work/neo-app-kuka-demo` on temporary app port `56804`.
+
+The JSH checker passed all 11 current checks: the eight existing health/catalog/trajectory checks
+and three non-writing Teach validation checks for model, motion ID, and keyframe input. A live JSON
+POST with two valid iiwa poses returned HTTP 201 and generated 16 ordered frames over 1,500 ms.
+The completed motion appeared in the model-specific list and was recalled with the same first and
+last joint values and `visitor-simulation` source. A request without JSON Content-Type returned
+HTTP 415.
+
+On this build, an immediate recall observed the TAG rows becoming query-visible just after the
+metadata completion marker. The API now reports this transient state as HTTP 503
+`MOTION_NOT_READY`; the browser retries four times at 250 ms intervals. The live test observed the
+transient response and then recalled all 16 frames successfully. Two completed test motions were
+retained in the shared app table; no existing rows or unrelated database objects were removed.
+
+Static validation also passed JavaScript syntax, whitespace, 52 browser ID bindings, and isolated
+Teach validation/interpolation checks including exact endpoints and 31 frames for three poses.
+After a navigation-state regression was reported, Chromium `153.0.8010.12` loaded the live JSH
+app and actual DB data through the DevTools protocol. Two joint-slider poses produced a 16-frame
+unsaved Teach draft immediately. Motion Signature zoom-in changed 1.0x to 1.5x, enabled zoom-out,
+and zoom-out restored 1.0x. Full playback independently loaded 33,271 frames and retained working
+1.0x to 1.5x zoom. At 375 px, Zoom Out, Zoom In, Reset, and Follow remained visible inside the
+viewport with no horizontal page overflow. The empty Teach chart now clears stale pixels and keeps
+disabled navigation controls visible until a second pose supplies a navigable draft. Pointer-driven
+IK target dragging and the visual error states were not automated in this round.

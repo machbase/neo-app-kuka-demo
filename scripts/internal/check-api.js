@@ -43,7 +43,13 @@ function run(base, reportFile) {
       assert(body.data.source.license === 'CC BY 4.0', 'missing public dataset attribution');
     } },
     { path: '/api/trajectory?mode=unknown', status: 400, verify: (body) => assert(body.error.code === 'INVALID_MODE', 'expected INVALID_MODE') },
-    { path: '/api/trajectory?mode=scenario&user=0&task=16', status: 400, verify: (body) => assert(body.error.code === 'INVALID_SCENARIO', 'expected INVALID_SCENARIO') }
+    { path: '/api/trajectory?mode=scenario&user=0&task=16', status: 400, verify: (body) => assert(body.error.code === 'INVALID_SCENARIO', 'expected INVALID_SCENARIO') },
+    { path: '/api/teach/motions?model=unknown', status: 400, verify: (body) => assert(body.error.code === 'INVALID_MODEL', 'expected INVALID_MODEL') },
+    { path: '/api/teach/motion?id=unknown', status: 400, verify: (body) => assert(body.error.code === 'INVALID_MOTION_ID', 'expected INVALID_MOTION_ID') },
+    {
+      path: '/api/teach/motions', method: 'POST', body: JSON.stringify({ model: 'iiwa7-r800', keyframes: [{ joints: [0, 0, 0, 0, 0, 0, 0] }] }),
+      status: 400, verify: (body) => assert(body.error.code === 'INVALID_KEYFRAMES', 'expected INVALID_KEYFRAMES')
+    }
   ];
 
   function next(index) {
@@ -53,7 +59,7 @@ function run(base, reportFile) {
       return;
     }
     const check = checks[index];
-    const request = http.get(base + check.path, (response) => {
+    const handleResponse = (response) => {
       try {
         const expectedStatus = typeof check.status === 'function' ? check.status() : check.status;
         assert(response.statusCode === expectedStatus, check.path + ': HTTP ' + response.statusCode);
@@ -63,8 +69,17 @@ function run(base, reportFile) {
       } catch (error) {
         console.println('FAIL:', error.message);
       }
+    };
+    if (!check.body) {
+      const request = http.get(base + check.path, handleResponse);
+      request.on('error', (error) => console.println('FAIL:', error.message));
+      return;
+    }
+    const request = http.request(base + check.path, {
+      method: check.method || 'POST', headers: { 'Content-Type': 'application/json' }
     });
     request.on('error', (error) => console.println('FAIL:', error.message));
+    request.end(check.body, handleResponse);
   }
   next(0);
 }

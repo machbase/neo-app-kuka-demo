@@ -37,7 +37,7 @@
       <div class="stage-panel">
         <div class="stage-toolbar">
           <div><span id="mode-label" class="status-chip">FULL DATASET</span><span id="scenario-label">All 30 participants</span></div>
-          <div class="toolbar-actions"><button id="toggle-target" class="icon-button" type="button" title="Toggle IK target">TARGET</button><button id="reset-camera" class="icon-button" type="button">RESET VIEW</button></div>
+          <div class="toolbar-actions"><button id="teach-motion" class="icon-button teach-entry" type="button">TEACH MOTION</button><button id="toggle-target" class="icon-button" type="button" title="Toggle IK target">TARGET</button><button id="reset-camera" class="icon-button" type="button">RESET VIEW</button></div>
         </div>
         <div id="stage" class="stage">
           <canvas id="robot-canvas" aria-label="Interactive three-dimensional robot arm"></canvas>
@@ -64,6 +64,7 @@
           <button class="active" data-mode="full" role="tab">Full playback</button>
           <button data-mode="scenario" role="tab">Scenario</button>
           <button data-mode="studio" role="tab">Studio</button>
+          <button data-mode="teach" role="tab">Teach</button>
         </div>
 
         <div id="full-options" class="mode-options">
@@ -80,6 +81,19 @@
         <div id="studio-options" class="mode-options" hidden>
           <label>Motion<select id="motion-select"><option value="showcase">Axis Showcase · 12 s</option><option value="pick-place">Pick & Place · 10 s</option></select></label>
           <p class="option-note">Generated poses remain inside conservative joint limits.</p>
+        </div>
+
+        <div id="teach-options" class="mode-options teach-options" hidden>
+          <p class="teach-kicker">SIMULATED TEACHING · NO HARDWARE CONTROL</p>
+          <ol id="teach-poses" class="teach-poses" aria-label="Captured poses"></ol>
+          <p id="teach-status" class="option-note" role="status">Move the cyan target or joint sliders, then capture at least two poses.</p>
+          <div class="teach-actions">
+            <button id="capture-pose" class="teach-primary" type="button">CAPTURE POSE</button>
+            <button id="undo-pose" type="button" disabled>UNDO</button>
+            <button id="preview-motion" type="button" disabled>PREVIEW</button>
+            <button id="save-motion" class="teach-save" type="button" disabled>SAVE &amp; REPLAY</button>
+          </div>
+          <label class="saved-motion-label">Motion memory<select id="saved-motion"><option value="">Saved motions on this model</option></select></label>
         </div>
 
         <details class="joint-deck" open>

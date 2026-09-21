@@ -2,6 +2,10 @@
 
 Official documentation reviewed on **2026-09-15**. The primary reference is the [official Machbase Neo documentation](https://docs.machbase.com/neo/).
 
+The JSH HTTP page was reviewed again on **2026-09-21** before adding the Teach JSON POST route.
+Its documented `Server.post()`, `ctx.request.body`, and `ctx.request.getHeader()` APIs are available
+since JSH v8.5.0, within this app's Neo 8.7.0 minimum baseline.
+
 ## Support policy
 
 - The minimum target is Machbase Neo **8.7.0**. The app is maintained to use the same JSH API contract on later versions.

@@ -6,13 +6,14 @@ const process = require('process');
 const ROOT = path.dirname(path.dirname(path.resolve(process.argv[1])));
 const { dbConfig, integer, options } = require(path.join(ROOT, 'lib/config.js'));
 const { robots, scenarios, trajectory } = require(path.join(ROOT, 'lib/api.js'));
+const teach = require(path.join(ROOT, 'lib/teach.js'));
 const manifest = require(path.join(ROOT, 'package.json'));
 
-function route(handler) {
+function route(handler, status) {
   return (ctx) => {
     ctx.setHeader('cache-control', 'no-store');
     try {
-      ctx.json(200, { ok: true, data: handler(ctx) });
+      ctx.json(status || 200, { ok: true, data: handler(ctx) });
     } catch (error) {
       // Responses never serialize raw driver errors or connection configuration.
       console.println('API error:', error.code || 'INTERNAL_ERROR');
@@ -57,6 +58,24 @@ function main() {
     const query = new URLSearchParams(ctx.request.query);
     return trajectory(config, query);
   }));
+  server.get('/api/teach/motions', route((ctx) => {
+    const query = new URLSearchParams(ctx.request.query);
+    return teach.list(config, query.get('model') || '');
+  }));
+  server.get('/api/teach/motion', route((ctx) => {
+    const query = new URLSearchParams(ctx.request.query);
+    return teach.load(config, query.get('id') || '');
+  }));
+  server.post('/api/teach/motions', route((ctx) => {
+    const contentType = ctx.request.getHeader('content-type') || '';
+    if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+      const error = new Error('Content-Type must be application/json.');
+      error.status = 415;
+      error.code = 'UNSUPPORTED_MEDIA_TYPE';
+      throw error;
+    }
+    return teach.save(config, ctx.request.body);
+  }, 201));
 
   process.addShutdownHook(() => server.close());
   server.serve((result) => console.println(manifest.name + ' listening at http://' + result.address));

@@ -76,6 +76,9 @@ DB 配置来自 `NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER` 和
   会被 retarget 到各模型安全的 Studio 关节范围，而图表仍显示原始数值。
 - **Scenario**：选择 User 1–30 和 Scenario 1–15。单个动作约 3.1–15.8 秒。
 - **Studio**：为三个模型播放 Axis Showcase 或 Pick & Place。
+- **Teach**：无需硬件，通过 XYZ IK 目标点或关节滑块捕获 2–8 个姿态。Preview 以
+  10 Hz 在姿态间平滑插值，`Save & Replay` 将完成的仿真动作保存到 Machbase。只有带有
+  完成标记的动作才会显示在各模型的 Motion memory 列表中。该功能不是实机控制或实测动作。
 
 可选模型为 LBR iiwa 7 R800、KR 6 R900-2 和 LBR iisy 3 R760。页面支持相机旋转缩放、
 0.5×–10× 播放、时间轴定位、关节控制、XYZ IK 和末端轨迹。Motion Signature 支持时间轴
@@ -91,9 +94,13 @@ DB 配置来自 `NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER` 和
 | `GET /api/trajectory?mode=full` | 全部 33,271 帧 |
 | `GET /api/trajectory?mode=scenario&user=1&task=1` | 一个实测场景 |
 | `GET /api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase` | 生成动作 |
+| `GET /api/teach/motions?model=iiwa7-r800` | 已保存的访客仿真动作列表 |
+| `GET /api/teach/motion?id=<motion-id>` | 读取一个已完成的访客动作 |
+| `POST /api/teach/motions` | 验证并插值 2–8 个关节姿态，然后保存动作 |
 
 响应格式为 `{ok:true,data}` / `{ok:false,error:{code,message}}`。原始 CSV、服务器源码、
-凭据和 Git 文件不会通过 HTTP 公开。
+凭据和 Git 文件不会通过 HTTP 公开。TAG appender 完成后，帧的查询可见性可能短暂落后于
+完成标记；此时读取会暂时返回 `MOTION_NOT_READY`，浏览器会在有限时间内重试。
 
 详细验证方法请参见 [English README](README.en.md)、[验证记录](doc/validation.md)和
 [兼容性策略](doc/compatibility.md)。

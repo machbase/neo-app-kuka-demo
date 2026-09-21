@@ -15,7 +15,8 @@ const ui = {};
   'scenario-info', 'motion-select', 'skip-idle', 'toggle-target', 'reset-camera',
   'source-title', 'source-link', 'joint-chart', 'chart-overview', 'chart-viewport', 'chart-tooltip',
   'chart-legend', 'chart-current', 'chart-range', 'chart-zoom-out', 'chart-zoom-in',
-  'chart-reset', 'chart-follow'
+  'chart-reset', 'chart-follow', 'teach-motion', 'teach-options', 'teach-poses', 'teach-status',
+  'capture-pose', 'undo-pose', 'preview-motion', 'save-motion', 'saved-motion'
 ].forEach((id) => { ui[id] = $(id); });
 
 const state = {
@@ -23,7 +24,8 @@ const state = {
   trajectory: null, frames: [], durationMs: 0, timeMs: 0, playing: false,
   speed: 10, lastFrameAt: performance.now(), scenarios: [], loadToken: 0,
   targetVisible: false, trail: [], lastChartAt: 0,
-  chartStartMs: 0, chartEndMs: 0, chartFollow: true, chartHoverMs: null, chartMaxAbs: 1
+  chartStartMs: 0, chartEndMs: 0, chartFollow: true, chartHoverMs: null, chartMaxAbs: 1,
+  teach: { keyframes: [], saving: false }
 };
 
 const assetCache = new Map();
@@ -39,9 +41,8 @@ const CHART_ZOOM_FACTOR = 1.5;
 const PUBLIC_MOTION_RANGE = [[-80, 15], [44, 82], [19, 80], [-102, -15], [-76, -17], [48, 95], [-30, 75]];
 let renderer, scene, camera, orbit, transform, transformHelper, target, trailLine, part;
 
-async function getJson(url) {
-  if (trajectoryCache.has(url)) return trajectoryCache.get(url);
-  const request = fetch(url, { cache: 'no-store' }).then(async (response) => {
+async function requestJson(url, options) {
+  const response = await fetch(url, { cache: 'no-store', ...options });
     const body = await response.json();
     if (!response.ok || !body.ok) {
       const error = new Error(body.error ? body.error.message : 'Unable to process the request.');
@@ -49,9 +50,21 @@ async function getJson(url) {
       throw error;
     }
     return body.data;
-  });
+}
+
+async function getJson(url) {
+  if (trajectoryCache.has(url)) return trajectoryCache.get(url);
+  const request = requestJson(url);
   trajectoryCache.set(url, request);
   try { return await request; } catch (error) { trajectoryCache.delete(url); throw error; }
+}
+
+function postJson(url, data) {
+  return requestJson(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
 }
 
 function quaternionFromRpy(rpy) {
@@ -275,6 +288,14 @@ function invert3(m) {
 
 function multiply3(m, v) { return new THREE.Vector3(m[0][0]*v.x+m[0][1]*v.y+m[0][2]*v.z,m[1][0]*v.x+m[1][1]*v.y+m[1][2]*v.z,m[2][0]*v.x+m[2][1]*v.y+m[2][2]*v.z); }
 
+function setTargetVisible(visible) {
+  state.targetVisible = Boolean(visible);
+  target.visible = state.targetVisible;
+  transformHelper.visible = state.targetVisible;
+  ui['toggle-target'].classList.toggle('active', state.targetVisible);
+  if (state.targetVisible && state.robot) target.position.copy(state.robot.tool.getWorldPosition(new THREE.Vector3()));
+}
+
 function setCamera(spec, animateMove) {
   const end = new THREE.Vector3().fromArray(spec.position), targetPosition = new THREE.Vector3().fromArray(spec.target);
   if (!animateMove) { camera.position.copy(end); orbit.target.copy(targetPosition); orbit.update(); return; }
@@ -296,6 +317,28 @@ function prepareFrames(data) {
   });
 }
 
+function installTrajectory(data, status, autoPlay) {
+  state.trajectory = data;
+  state.frames = prepareFrames(data);
+  state.durationMs = state.frames.length ? state.frames.at(-1).playTMs : 0;
+  state.timeMs = 0;
+  ui.timeline.max = String(Math.max(1, state.durationMs));
+  ui.timeline.value = '0';
+  ui['current-time'].textContent = formatTime(0);
+  ui.duration.textContent = formatTime(state.durationMs);
+  computeChartMetadata();
+  resetChartView();
+  updateSource(data.source);
+  clearTrail();
+  if (state.frames.length) {
+    applyFrame(state.frames[0]);
+    updateScenarioLabel({ meta: state.frames[0] });
+  }
+  ui['data-status'].textContent = status;
+  if (autoPlay && !reduceMotion) play(); else pause();
+  drawChart(true);
+}
+
 async function loadTrajectory() {
   const token = ++state.loadToken;
   let url;
@@ -305,12 +348,9 @@ async function loadTrajectory() {
   showLoading(state.mode === 'full' ? 'Loading all 33,271 frames…' : 'Loading motion data…');
   try {
     const data = await getJson(url); if (token !== state.loadToken) return;
-    state.trajectory = data; state.frames = prepareFrames(data); state.durationMs = state.frames.at(-1).playTMs; state.timeMs = 0;
-    ui.timeline.max = String(Math.max(1, state.durationMs)); ui.timeline.value = '0'; ui.duration.textContent = formatTime(state.durationMs);
     state.speed = state.mode === 'full' ? 10 : 1; ui.speed.value = String(state.speed);
-    computeChartMetadata(); resetChartView(); updateSource(data.source); clearTrail(); applyFrame(state.frames[0]); updateScenarioLabel({ meta: state.frames[0] }); hideLoading();
-    ui['data-status'].textContent = data.frames.length.toLocaleString() + ' frames ready' + (usesPublicRetarget() ? ' · retargeted' : '');
-    if (!reduceMotion) play(); else pause(); drawChart(true);
+    installTrajectory(data, data.frames.length.toLocaleString() + ' frames ready' + (usesPublicRetarget() ? ' · retargeted' : ''), true);
+    hideLoading();
   } catch (error) { if (token === state.loadToken) { hideLoading(); showError(error.message); ui['data-status'].textContent = error.code || 'Load failed'; } }
 }
 
@@ -333,7 +373,7 @@ function applyFrame(frame) {
 }
 
 function usesPublicRetarget() {
-  return state.mode !== 'studio' && Boolean(state.robot && state.robot.model.publicMotionRange);
+  return ['full', 'scenario'].includes(state.mode) && Boolean(state.robot && state.robot.model.publicMotionRange);
 }
 
 function retargetPublicPose(values) {
@@ -509,7 +549,14 @@ function drawOverview(force) {
 }
 
 function drawChart(force) {
-  if (!state.frames.length || !state.robot) { updateChartReadout(); return; }
+  if (!state.frames.length || !state.robot) {
+    [ui['joint-chart'], ui['chart-overview']].forEach((canvas) => {
+      const { width, height } = sizeChartCanvas(canvas, force);
+      canvas.getContext('2d').clearRect(0, 0, width, height);
+    });
+    updateChartReadout();
+    return;
+  }
   const canvas = ui['joint-chart'];
   const { rect, ratio, width, height } = sizeChartCanvas(canvas, force);
   const context = canvas.getContext('2d'); context.clearRect(0, 0, width, height);
@@ -541,7 +588,8 @@ function drawChart(force) {
 
 function updateScenarioLabel(frame) {
   if (!frame || !frame.meta) return;
-  ui['scenario-label'].textContent = state.mode === 'full' || state.mode === 'scenario' ? 'Participant ' + frame.meta.user + ' · Scenario ' + frame.meta.task : frame.meta.scenario;
+  if (state.mode === 'teach') ui['scenario-label'].textContent = 'Visitor motion · ' + frame.meta.scenario;
+  else ui['scenario-label'].textContent = state.mode === 'full' || state.mode === 'scenario' ? 'Participant ' + frame.meta.user + ' · Scenario ' + frame.meta.task : frame.meta.scenario;
 }
 
 function seekPlayback(timeMs, shouldPause) {
@@ -699,23 +747,211 @@ function formatTime(ms){const total=Math.max(0,Math.round(ms/1000)),hours=Math.f
 function showLoading(text){ui.loading.hidden=false;ui['loading-detail'].textContent=text;ui['stage-error'].hidden=true}
 function hideLoading(){ui.loading.hidden=true}
 function showError(message){ui['stage-error'].hidden=false;ui['stage-error'].querySelector('span').textContent=message}
-function updateSource(source){ui['source-title'].textContent=source.title;const publicData=source.kind==='public-recording';ui['source-link'].textContent=publicData?'CC BY 4.0 · DOI '+source.doi+' ↗':'Generated motion · project data';ui['source-link'].href=publicData?'https://doi.org/'+source.doi:'./third-party.html'}
+function updateSource(source){ui['source-title'].textContent=source.title;const publicData=source.kind==='public-recording',visitor=source.kind==='visitor-simulation';ui['source-link'].textContent=publicData?'CC BY 4.0 · DOI '+source.doi+' ↗':visitor?'Simulated with IK · stored in Machbase Neo':'Generated motion · project data';ui['source-link'].href=publicData?'https://doi.org/'+source.doi:'./third-party.html'}
 function resize(){if(!renderer)return;const rect=ui.stage.getBoundingClientRect();renderer.setSize(rect.width,rect.height,false);camera.aspect=rect.width/rect.height;camera.updateProjectionMatrix();drawChart(true)}
+
+function visitorSource(title) {
+  return { kind: 'visitor-simulation', title: title || 'Visitor-created simulated motion', license: 'Project data', sampleRateHz: 10 };
+}
+
+function renderTeachState(message) {
+  ui['teach-poses'].replaceChildren();
+  state.teach.keyframes.forEach((_, index) => {
+    const item = document.createElement('li');
+    item.textContent = String(index + 1).padStart(2, '0');
+    item.title = 'Captured pose ' + (index + 1);
+    ui['teach-poses'].appendChild(item);
+  });
+  const count = state.teach.keyframes.length;
+  ui['capture-pose'].disabled = count >= 8 || state.teach.saving;
+  ui['undo-pose'].disabled = !count || state.teach.saving;
+  ui['preview-motion'].disabled = count < 2 || state.teach.saving;
+  ui['save-motion'].disabled = count < 2 || state.teach.saving;
+  ui['save-motion'].textContent = state.teach.saving ? 'SAVING…' : 'SAVE & REPLAY';
+  if (message) ui['teach-status'].textContent = message;
+}
+
+function clearTeachPlayback() {
+  pause();
+  state.trajectory = null;
+  state.frames = [];
+  state.durationMs = 0;
+  state.timeMs = 0;
+  ui.timeline.max = '1';
+  ui.timeline.value = '0';
+  ui['current-time'].textContent = '00:00';
+  ui.duration.textContent = '00:00';
+  resetChartView();
+  drawChart(true);
+}
+
+function resetTeach(message) {
+  state.teach.keyframes = [];
+  state.teach.saving = false;
+  clearTeachPlayback();
+  setTargetVisible(true);
+  ui['manual-state'].textContent = 'TEACH TARGET';
+  ui['scenario-label'].textContent = 'Move target · capture poses';
+  ui['data-status'].textContent = 'Teaching workspace ready';
+  updateSource(visitorSource('Visitor teaching workspace'));
+  renderTeachState(message || 'Move the cyan target or joint sliders, then capture at least two poses.');
+}
+
+function teachFrames() {
+  const frames = [];
+  state.teach.keyframes.forEach((start, segment) => {
+    if (segment === state.teach.keyframes.length - 1) return;
+    const end = state.teach.keyframes[segment + 1];
+    for (let step = segment === 0 ? 0 : 1; step <= 15; step++) {
+      const value = step / 15;
+      const amount = value * value * (3 - 2 * value);
+      frames.push({
+        tMs: segment * 1500 + step * 100,
+        user: 0,
+        task: 0,
+        scenario: 'unsaved-preview',
+        joints: start.map((joint, index) => joint + (end[index] - joint) * amount)
+      });
+    }
+  });
+  return frames;
+}
+
+function syncTeachDraft() {
+  if (state.teach.keyframes.length < 2) {
+    clearTeachPlayback();
+    return;
+  }
+  const frames = teachFrames();
+  installTrajectory({
+    model: state.modelId, mode: 'teach', motion: 'unsaved-preview',
+    source: visitorSource('Unsaved visitor motion preview'),
+    durationMs: frames.at(-1).tMs, originalDurationMs: frames.at(-1).tMs, frames
+  }, frames.length + ' draft frames · not saved', false);
+  seekPlayback(state.durationMs, true);
+  setTargetVisible(true);
+  ui['manual-state'].textContent = 'TEACH TARGET';
+}
+
+function captureTeachPose() {
+  if (!state.robot || state.teach.keyframes.length >= 8) return;
+  pause();
+  state.teach.keyframes.push(state.robot.joints.map((joint) => Number(joint.angle.toFixed(7))));
+  if (state.teach.keyframes.length >= 2) syncTeachDraft();
+  renderTeachState('Pose ' + state.teach.keyframes.length + ' captured. Move the target and capture the next pose.');
+}
+
+function undoTeachPose() {
+  const pose = state.teach.keyframes.pop();
+  if (state.teach.keyframes.length >= 2) syncTeachDraft();
+  else {
+    clearTeachPlayback();
+    if (state.teach.keyframes.length) setPose(state.teach.keyframes[0]);
+    else if (pose) setPose(pose);
+    setTargetVisible(true);
+  }
+  renderTeachState(state.teach.keyframes.length ? 'Last pose removed.' : 'No captured poses. Capture at least two poses.');
+}
+
+function previewTeachMotion() {
+  if (state.teach.keyframes.length < 2) return;
+  state.speed = 1; ui.speed.value = '1';
+  if (!state.frames.length) syncTeachDraft();
+  setTargetVisible(false);
+  state.timeMs = 0; ui.timeline.value = '0';
+  applyFrame(frameAt(0));
+  if (!reduceMotion) play(); else pause();
+  renderTeachState('Previewing ' + state.teach.keyframes.length + ' captured poses. Save when ready.');
+}
+
+async function loadTeachMotions(selectedId) {
+  const select = ui['saved-motion'];
+  select.disabled = true;
+  try {
+    const data = await requestJson('./api/teach/motions?model=' + encodeURIComponent(state.modelId));
+    select.replaceChildren(new Option(data.motions.length ? 'Saved motions on this model' : 'No saved motions yet', ''));
+    data.motions.forEach((motion) => {
+      const created = new Date(motion.createdAt);
+      const label = (Number.isNaN(created.valueOf()) ? motion.id : created.toLocaleString()) + ' · ' + motion.frameCount + ' frames';
+      select.add(new Option(label, motion.id));
+    });
+    if (selectedId) select.value = selectedId;
+  } catch (error) {
+    select.replaceChildren(new Option('Unable to load motion memory', ''));
+  } finally {
+    select.disabled = false;
+  }
+}
+
+async function saveTeachMotion() {
+  if (state.teach.keyframes.length < 2 || state.teach.saving) return;
+  state.teach.saving = true;
+  renderTeachState('Saving motion memory to Machbase Neo…');
+  try {
+    const data = await postJson('./api/teach/motions', { model: state.modelId, keyframes: state.teach.keyframes.map((joints) => ({ joints })) });
+    setTargetVisible(false);
+    state.speed = 1; ui.speed.value = '1';
+    installTrajectory(data, data.frames.length + ' frames · saved in Machbase Neo', true);
+    await loadTeachMotions(data.runId);
+    renderTeachState('Motion memory saved · ' + state.teach.keyframes.length + ' poses · ' + data.frames.length + ' frames.');
+  } catch (error) {
+    renderTeachState((error.code || 'SAVE_FAILED') + ' · ' + error.message);
+    ui['data-status'].textContent = error.code || 'Save failed';
+  } finally {
+    state.teach.saving = false;
+    renderTeachState();
+  }
+}
+
+async function loadSavedTeachMotion(id) {
+  if (!id) return;
+  showLoading('Recalling motion memory…');
+  try {
+    const data = await recallTeachMotion(id, 4);
+    setTargetVisible(false);
+    state.speed = 1; ui.speed.value = '1';
+    installTrajectory(data, data.frames.length + ' frames recalled from Machbase Neo', true);
+    renderTeachState('Replaying saved motion memory ' + id + '.');
+    hideLoading();
+  } catch (error) {
+    hideLoading(); showError(error.message); ui['data-status'].textContent = error.code || 'Load failed';
+  }
+}
+
+async function recallTeachMotion(id, retries) {
+  try {
+    return await requestJson('./api/teach/motion?id=' + encodeURIComponent(id));
+  } catch (error) {
+    if (error.code !== 'MOTION_NOT_READY' || retries <= 0) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return recallTeachMotion(id, retries - 1);
+  }
+}
+
+async function enterTeach() {
+  state.mode = 'teach';
+  updateModePanels();
+  resetTeach();
+  await loadTeachMotions();
+}
 
 async function selectModel(modelId) {
   state.modelId=modelId;document.querySelectorAll('.model-card').forEach((card)=>card.classList.toggle('active',card.dataset.model===modelId));
   const meta=(await getJson('./api/robots')).models.find((item)=>item.id===modelId);ui['robot-name'].textContent=meta.name;ui['robot-spec'].textContent=meta.dof+' axes · '+meta.payloadKg+' kg payload · '+meta.reachMm+' mm reach';
   const built=await buildRobot(modelId);if(!built||state.modelId!==modelId)return;
+  if(state.mode==='teach'){resetTeach('Model changed. Capture a new motion for '+meta.name+'.');await loadTeachMotions();return}
   if(modelId!=='iiwa7-r800'){ui['motion-select'].value='showcase';state.motion='showcase';setMode('studio')}else await loadTrajectory();
 }
 
 function updateModePanels(){
-  ['full','scenario','studio'].forEach((mode)=>{document.querySelector('[data-mode="'+mode+'"]').classList.toggle('active',state.mode===mode);ui[mode+'-options'].hidden=state.mode!==mode});
-  ui['mode-label'].textContent=state.mode==='full'?'FULL DATASET':state.mode==='scenario'?'SCENARIO':'STUDIO MOTION';
+  ['full','scenario','studio','teach'].forEach((mode)=>{document.querySelector('[data-mode="'+mode+'"]').classList.toggle('active',state.mode===mode);ui[mode+'-options'].hidden=state.mode!==mode});
+  ui['mode-label'].textContent=state.mode==='full'?'FULL DATASET':state.mode==='scenario'?'SCENARIO':state.mode==='studio'?'STUDIO MOTION':'TEACH MOTION';
 }
 async function setMode(mode) {
   // An explicit playback-mode choice preserves the robot selected by the user.
+  if (mode === 'teach') { await enterTeach(); return; }
   state.mode = mode;
+  setTargetVisible(false);
   updateModePanels();
   await loadTrajectory();
 }
@@ -729,7 +965,10 @@ function bindEvents(){
   ui['skip-idle'].addEventListener('change',()=>{if(state.trajectory){state.frames=prepareFrames(state.trajectory);state.durationMs=state.frames.at(-1).playTMs;ui.timeline.max=state.durationMs;ui.duration.textContent=formatTime(state.durationMs);state.timeMs=0;computeChartMetadata();resetChartView();seekPlayback(0,false)}});
   ui['user-select'].addEventListener('change',()=>{updateScenarioInfo();if(state.mode==='scenario')loadTrajectory()});ui['task-select'].addEventListener('change',()=>{updateScenarioInfo();if(state.mode==='scenario')loadTrajectory()});
   ui['motion-select'].addEventListener('change',()=>{state.motion=ui['motion-select'].value;if(state.mode==='studio')loadTrajectory()});
-  ui['toggle-target'].addEventListener('click',()=>{state.targetVisible=!state.targetVisible;target.visible=state.targetVisible;transformHelper.visible=state.targetVisible;ui['toggle-target'].classList.toggle('active',state.targetVisible);if(state.targetVisible&&state.robot)target.position.copy(state.robot.tool.getWorldPosition(new THREE.Vector3()))});
+  ui['teach-motion'].addEventListener('click',()=>setMode('teach'));
+  ui['toggle-target'].addEventListener('click',()=>setTargetVisible(!state.targetVisible));
+  ui['capture-pose'].addEventListener('click',captureTeachPose);ui['undo-pose'].addEventListener('click',undoTeachPose);ui['preview-motion'].addEventListener('click',previewTeachMotion);ui['save-motion'].addEventListener('click',saveTeachMotion);
+  ui['saved-motion'].addEventListener('change',()=>loadSavedTeachMotion(ui['saved-motion'].value));
   ui['reset-camera'].addEventListener('click',()=>setCamera(state.robot.model.camera,true));ui.retry.addEventListener('click',()=>selectModel(state.modelId));
 }
 

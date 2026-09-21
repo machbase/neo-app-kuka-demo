@@ -75,6 +75,10 @@ DB接続は`NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER`、
   元の値を表示します。
 - **Scenario**：User 1–30とScenario 1–15から1件を選びます。各動作は約3.1–15.8秒です。
 - **Studio**：3モデルでAxis ShowcaseまたはPick & Placeを再生します。
+- **Teach**：ハードウェアを使わず、XYZ IKターゲットまたは関節スライダーで2～8個の
+  姿勢を記録します。Previewは姿勢間を10 Hzで補間し、`Save & Replay`は完成した
+  シミュレーション動作をMachbaseへ保存します。完了マーカーを持つ動作だけがモデル別の
+  Motion memory一覧に表示されます。実機制御や実測動作ではありません。
 
 モデルはLBR iiwa 7 R800、KR 6 R900-2、LBR iisy 3 R760から選択できます。カメラ、
 0.5×–10×速度、シーク、関節操作、XYZ IK、軌跡を提供します。Motion Signatureでは、
@@ -90,9 +94,14 @@ DB接続は`NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER`、
 | `GET /api/trajectory?mode=full` | 全33,271フレーム |
 | `GET /api/trajectory?mode=scenario&user=1&task=1` | 選択シナリオ |
 | `GET /api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase` | 生成モーション |
+| `GET /api/teach/motions?model=iiwa7-r800` | 保存済みシミュレーション動作一覧 |
+| `GET /api/teach/motion?id=<motion-id>` | 完了した観覧者動作の再取得 |
+| `POST /api/teach/motions` | 2～8個の関節姿勢を検証・補間して保存 |
 
 応答は`{ok:true,data}` / `{ok:false,error:{code,message}}`です。元CSV、サーバーソース、
-認証情報、GitファイルはHTTP公開しません。
+認証情報、GitファイルはHTTP公開しません。TAG appender直後にフレームの参照可能化が
+完了マーカーより少し遅れる場合、再取得は一時的な`MOTION_NOT_READY`を返し、ブラウザが
+短時間だけ再試行します。
 
 検証方法と履歴は[English README](README.en.md)、[検証記録](doc/validation.md)、
 [互換性ポリシー](doc/compatibility.md)を参照してください。
