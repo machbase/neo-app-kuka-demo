@@ -6,6 +6,10 @@ The JSH HTTP page was reviewed again on **2026-09-21** before adding the Teach J
 Its documented `Server.post()`, `ctx.request.body`, and `ctx.request.getHeader()` APIs are available
 since JSH v8.5.0, within this app's Neo 8.7.0 minimum baseline.
 
+The JSH mounting, package-manager, and `machcli` appender pages were reviewed again on
+**2026-09-28** while restructuring the fresh-checkout guide. The guide keeps explicit `-v`
+mounting, runs `pkg` commands from the package root, and retains the verified 8.7.0 `--` separator.
+
 ## Support policy
 
 - The minimum target is Machbase Neo **8.7.0**. The app is maintained to use the same JSH API contract on later versions.
@@ -35,6 +39,10 @@ Documentation links use canonical web page paths. In the Markdown source, the op
 ## Current APIs and the robot motion sample
 
 The current `machcli` documentation describes the 8.7.0 database selection options (`database`, alias `db`), named parameters, `append()`, and `tx()`. This sample uses the default database, positional parameters, and the documented appender for 33,271 public motion frames. TAG tables do not support transaction rollback, so insertion is not wrapped in `tx()`. Static robot, run, participant, scenario, source, and DATA-axis bound attributes live in the TAG `METADATA` area; event-time values remain in DATA columns. A metadata-only run marker in the same logical table prevents partial runs from becoming visible through the API. Playback queries combine automatically indexed scalar metadata or an exact `NAME` with `TIME BETWEEN START_TIME AND END_TIME`, preserving both metadata-index and time-partition pruning as data accumulates.
+
+`scripts/verify-data.js` is a read-only preflight. It and `seed.js` share `lib/public-data.js`, so
+file presence, row shape, finite source values, joint conversion, frame count, and scenario count
+cannot drift between preflight and ingestion. The preflight does not connect to the database.
 
 The browser uses Three.js r186 and public robot meshes as locally served static assets. These are browser dependencies and are not installed by JSH `pkg`; the exact files and licenses are checked into the repository. `http.Server.static()` exposes only the dedicated `public/assets` and `public/vendor` trees. Robot descriptions, source CSV files, and license source files remain outside the web root.
 

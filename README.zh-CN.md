@@ -7,11 +7,25 @@
 模型、生成动作、关节滑块以及位置 IK 目标。本应用仅用于仿真和可视化，不控制真实机器人。
 
 服务器和 CLI 在 Neo JSH 中运行，页面使用项目内置的 Three.js。无需 Node.js、npm install、
-前端构建或外部 CDN。需要 Machbase Neo **8.7.0 或更高版本**。
+前端构建或外部 CDN。
+
+## 要求
+
+- Git、Machbase Neo **8.7.0 或更高版本**以及正在运行的 Neo DB
+- 支持 WebGL 的浏览器
 
 ## 快速开始
 
-在 OS shell 中启动带显式挂载的 JSH：
+### 1. 检查 Neo 并克隆仓库
+
+```sh
+<NEO_EXECUTABLE> version
+git clone https://github.com/machbase/neo-app-kuka-demo.git neo-app-kuka-demo
+```
+
+### 2. 启动 JSH
+
+先确认运行中 Neo DB 的实际 Machbase 端口。`5656` 是默认值，实际端口不同时请替换。
 
 ```sh
 <NEO_EXECUTABLE> jsh \
@@ -19,21 +33,20 @@
   -e NEO_APP_DB_PORT=5656
 ```
 
-在 JSH 中创建表并载入全部数据：
+### 3. 验证并载入数据
+
+30 个公开 CSV 已包含在仓库中，无需单独下载。`verify-data.js` 不修改 DB，只验证
+33,271 帧和 450 个场景。
 
 ```text
 cd /work/neo-app-kuka-demo
+./scripts/verify-data.js
 ./scripts/schema.js
 ./scripts/seed.js
 ```
 
 `schema.js` 创建一个同时包含帧 DATA 和标签 METADATA 的 `NEO_APP_ROBOT_MOTION`，不会
-删除现有数据。从旧 schema 迁移时，停止服务器后执行一次：
-
-```text
-./scripts/migrate-tag-metadata.js --confirm
-./scripts/seed.js
-```
+删除现有数据。成功时会输出 `ok:true`、`publicFrames:33271` 和 `publicScenarios:450`。
 
 `seed.js` 每次执行都会新增一组完整数据：
 
@@ -42,27 +55,75 @@ cd /work/neo-app-kuka-demo
 - 仅在全部帧写入成功后生成的完成标记。
 
 TAG 写入不支持 transaction rollback。失败时可能留下部分行，但由于没有完成标记，API
-不会选择该次运行。
+不会选择该次运行。修复原因后重新执行 `seed.js`。
+
+### 4. 启动服务器 — JSH 会话 A
+
+服务器在 foreground 中运行，请保持此会话打开。
 
 ```text
 cd /work/neo-app-kuka-demo/app
 ./server.js --host 127.0.0.1 --port 56802
 ```
 
-打开 **http://127.0.0.1:56802/**。在 JSH 中按 `Ctrl+C` 停止服务器。
+### 5. 验证 — 另一个 OS shell/JSH 会话 B
 
-也可以使用 JSH 的 `pkg run`：
+```sh
+<NEO_EXECUTABLE> jsh \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
+  /work/neo-app-kuka-demo/scripts/check.js --url http://127.0.0.1:56802
+```
+
+确认输出 `PASS: 11 robot API checks`。
+
+### 6. 打开浏览器
+
+打开 **http://127.0.0.1:56802/**。在会话 A 中按 `Ctrl+C` 停止服务器。
+
+## JSH 快捷命令
+
+请在项目根目录（`/work/neo-app-kuka-demo`）执行。
+
+| 命令 | 用途 |
+| --- | --- |
+| `pkg run verify-data` | 非破坏性检查内置 CSV |
+| `pkg run schema` | 创建当前 schema 并保留已有数据 |
+| `pkg run seed` | 新增一个完成的运行 |
+| `pkg run start` | 在会话 A 运行 foreground 服务器 |
+| `pkg run check` | 在会话 B 检查服务器 |
+| `pkg run migrate-tag-metadata -- --confirm` | **仅用于旧 schema 升级，会删除应用数据** |
+
+应用选项应放在 `--` 之后，例如 `pkg run start -- --port 56803`。
+
+## 升级旧的双表 schema
+
+fresh checkout 不要执行此步骤。仅在使用旧 schema 时停止服务器并执行一次。它会永久
+删除本应用的 robot-motion 表，然后重新创建并载入数据。
 
 ```text
 cd /work/neo-app-kuka-demo
-pkg run schema
-pkg run migrate-tag-metadata -- --confirm
-pkg run seed
-pkg run start
-pkg run check
+./scripts/migrate-tag-metadata.js --confirm
+./scripts/seed.js
 ```
 
-应用选项应放在 `--` 之后，例如 `pkg run start -- --port 56803`。
+## 从 OS shell 直接启动服务器
+
+```sh
+<NEO_EXECUTABLE> jsh \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
+  -e NEO_APP_DB_PORT=5656 \
+  /work/neo-app-kuka-demo/app/server.js --host 127.0.0.1 --port 56802
+```
+
+## 从可信网络进行外部访问
+
+```text
+cd /work/neo-app-kuka-demo
+pkg run start -- --host 0.0.0.0 --port 56802
+```
+
+外部浏览器使用 `http://<server-ip>:56802/`。不要公开 DB 端口。Teach 写入 API 没有认证，
+因此不要直接暴露到公共互联网；请使用 reverse proxy 认证或 IP 白名单。
 
 DB 配置来自 `NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER` 和
 `NEO_APP_DB_PASSWORD`。默认值为 `127.0.0.1`、`5656`、`sys`、`manager`。应用不会
@@ -79,6 +140,9 @@ DB 配置来自 `NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER` 和
 - **Teach**：无需硬件，通过 XYZ IK 目标点或关节滑块捕获 2–8 个姿态。Preview 以
   10 Hz 在姿态间平滑插值，`Save & Replay` 将完成的仿真动作保存到 Machbase。只有带有
   完成标记的动作才会显示在各模型的 Motion memory 列表中。该功能不是实机控制或实测动作。
+
+Teach 的使用顺序为：`选择 Teach → 移动目标点或关节 → 至少两次 Capture Pose → Preview
+→ Save & Replay → 从 Motion memory 再次读取`。
 
 可选模型为 LBR iiwa 7 R800、KR 6 R900-2 和 LBR iisy 3 R760。页面支持相机旋转缩放、
 0.5×–10× 播放、时间轴定位、关节控制、XYZ IK 和末端轨迹。Motion Signature 支持时间轴
@@ -102,7 +166,7 @@ DB 配置来自 `NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER` 和
 凭据和 Git 文件不会通过 HTTP 公开。TAG appender 完成后，帧的查询可见性可能短暂落后于
 完成标记；此时读取会暂时返回 `MOTION_NOT_READY`，浏览器会在有限时间内重试。
 
-详细验证方法请参见 [English README](README.en.md)、[验证记录](doc/validation.md)和
+详细验证历史请参见[验证记录](doc/validation.md)和
 [兼容性策略](doc/compatibility.md)。
 
 ## 许可证

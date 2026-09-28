@@ -30,6 +30,7 @@ try {
   const args = options({ url: { type: 'string' } });
   if (args.help) {
     console.println('Usage: ./scripts/check.js [--url http://127.0.0.1:56802]');
+    console.println('Run from a second JSH session while the app server is running.');
   } else {
     const base = (args.url || 'http://127.0.0.1:56802').replace(/\/+$/, '');
     if (!/^https?:\/\/[^\s?#]+$/.test(base)) throw new Error('--url must be an HTTP(S) base URL');

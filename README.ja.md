@@ -7,11 +7,26 @@ Machbase Neo JSHアプリです。30人・450シナリオの33,271実測フレ�
 生成モーション、関節スライダー、位置IKターゲットを収録しています。実機制御は行いません。
 
 サーバーとCLIはNeo JSH、画面はローカル同梱のThree.jsで動作します。Node.js、npm install、
-フロントエンドビルド、外部CDNは不要です。Machbase Neo **8.7.0以降**が必要です。
+フロントエンドビルド、外部CDNは不要です。
+
+## 必要条件
+
+- Git、Machbase Neo **8.7.0以降**、実行中のNeo DB
+- WebGL対応ブラウザ
 
 ## クイックスタート
 
-OSシェルでJSHを起動します。
+### 1. Neoの確認とclone
+
+```sh
+<NEO_EXECUTABLE> version
+git clone https://github.com/machbase/neo-app-kuka-demo.git neo-app-kuka-demo
+```
+
+### 2. JSHの起動
+
+実行中のNeo DBのMachbaseポートを確認します。`5656`はデフォルト値なので、実際の
+ポートが異なる場合は変更してください。
 
 ```sh
 <NEO_EXECUTABLE> jsh \
@@ -19,48 +34,97 @@ OSシェルでJSHを起動します。
   -e NEO_APP_DB_PORT=5656
 ```
 
-JSHでスキーマと全データを準備します。
+### 3. データ確認とロード
+
+公開CSV 30ファイルはリポジトリに含まれ、別途ダウンロードは不要です。
+`verify-data.js`はDBを変更せず、33,271フレーム・450シナリオを確認します。
 
 ```text
 cd /work/neo-app-kuka-demo
+./scripts/verify-data.js
 ./scripts/schema.js
 ./scripts/seed.js
 ```
 
 `schema.js`はフレームDATAとタグMETADATAを持つ単一の`NEO_APP_ROBOT_MOTION`を作成し、
-既存データは削除しません。旧schemaからの移行時だけ、サーバー停止後に次を実行します。
-
-```text
-./scripts/migrate-tag-metadata.js --confirm
-./scripts/seed.js
-```
+既存データは削除しません。成功時は`ok:true`、`publicFrames:33271`、
+`publicScenarios:450`が表示されます。
 
 - 公開CSV 30ファイル：33,271フレーム、450シナリオ、元の間隔で約1時間42分21秒
 - 3モデルそれぞれの12秒Axis Showcaseと10秒Pick & Place
 - 全フレーム成功後にのみ書き込まれる完了マーカー
 
 TAG入力にはtransaction rollbackがありません。途中で失敗した行は残る場合がありますが、
-完了マーカーがないためAPIから選択されません。
+完了マーカーがないためAPIから選択されません。原因を修正して`seed.js`を再実行します。
+
+### 4. サーバー起動 — JSHセッションA
+
+サーバーはforegroundで動作するため、このセッションを開いたままにします。
 
 ```text
 cd /work/neo-app-kuka-demo/app
 ./server.js --host 127.0.0.1 --port 56802
 ```
 
-**http://127.0.0.1:56802/** を開きます。終了はJSHで`Ctrl+C`です。
+### 5. 検証 — 別のOSシェル/JSHセッションB
 
-JSHの短縮コマンドも利用できます。
+```sh
+<NEO_EXECUTABLE> jsh \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
+  /work/neo-app-kuka-demo/scripts/check.js --url http://127.0.0.1:56802
+```
+
+`PASS: 11 robot API checks`を確認します。
+
+### 6. ブラウザ
+
+**http://127.0.0.1:56802/** を開きます。終了はセッションAで`Ctrl+C`です。
+
+## JSH短縮コマンド
+
+プロジェクトroot（`/work/neo-app-kuka-demo`）で実行します。
+
+| コマンド | 用途 |
+| --- | --- |
+| `pkg run verify-data` | 同梱CSVの非破壊チェック |
+| `pkg run schema` | 現行schema作成、既存データ保持 |
+| `pkg run seed` | 新しい完了runを追加 |
+| `pkg run start` | セッションAでforegroundサーバー起動 |
+| `pkg run check` | セッションBでサーバー検証 |
+| `pkg run migrate-tag-metadata -- --confirm` | **旧schema移行専用、アプリデータ削除** |
+
+オプションは`pkg run start -- --port 56803`のように`--`の後へ渡します。
+
+## 旧2テーブルschemaの移行
+
+fresh checkoutでは実行しません。旧schemaを使用している場合のみサーバーを停止し、
+次を一度実行します。このアプリのrobot-motionテーブルを完全に削除して再ロードします。
 
 ```text
 cd /work/neo-app-kuka-demo
-pkg run schema
-pkg run migrate-tag-metadata -- --confirm
-pkg run seed
-pkg run start
-pkg run check
+./scripts/migrate-tag-metadata.js --confirm
+./scripts/seed.js
 ```
 
-オプションは`pkg run start -- --port 56803`のように`--`の後へ渡します。
+## OSシェルから直接サーバー起動
+
+```sh
+<NEO_EXECUTABLE> jsh \
+  -v /work/neo-app-kuka-demo=/absolute/path/to/neo-app-kuka-demo \
+  -e NEO_APP_DB_PORT=5656 \
+  /work/neo-app-kuka-demo/app/server.js --host 127.0.0.1 --port 56802
+```
+
+## 信頼できるネットワークからの外部アクセス
+
+```text
+cd /work/neo-app-kuka-demo
+pkg run start -- --host 0.0.0.0 --port 56802
+```
+
+外部では`http://<server-ip>:56802/`を開きます。DBポートを公開しないでください。
+Teach書き込みAPIには認証がないため、公開インターネットへ直接公開せず、reverse proxy認証
+またはIP制限を使用してください。
 
 DB接続は`NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER`、
 `NEO_APP_DB_PASSWORD`を使用します。デフォルトは`127.0.0.1`、`5656`、`sys`、
@@ -79,6 +143,9 @@ DB接続は`NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER`、
   姿勢を記録します。Previewは姿勢間を10 Hzで補間し、`Save & Replay`は完成した
   シミュレーション動作をMachbaseへ保存します。完了マーカーを持つ動作だけがモデル別の
   Motion memory一覧に表示されます。実機制御や実測動作ではありません。
+
+Teachは`Teachを選択 → ターゲットまたは関節を移動 → Capture Poseを2回以上 → Preview
+→ Save & Replay → Motion memoryから再取得`の順で使用します。
 
 モデルはLBR iiwa 7 R800、KR 6 R900-2、LBR iisy 3 R760から選択できます。カメラ、
 0.5×–10×速度、シーク、関節操作、XYZ IK、軌跡を提供します。Motion Signatureでは、
@@ -103,7 +170,7 @@ DB接続は`NEO_APP_DB_HOST`、`NEO_APP_DB_PORT`、`NEO_APP_DB_USER`、
 完了マーカーより少し遅れる場合、再取得は一時的な`MOTION_NOT_READY`を返し、ブラウザが
 短時間だけ再試行します。
 
-検証方法と履歴は[English README](README.en.md)、[検証記録](doc/validation.md)、
+詳細な検証履歴は[検証記録](doc/validation.md)、
 [互換性ポリシー](doc/compatibility.md)を参照してください。
 
 ## ライセンス

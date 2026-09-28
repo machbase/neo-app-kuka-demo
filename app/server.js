@@ -32,6 +32,7 @@ function main() {
   const args = options({ host: { type: 'string' }, port: { type: 'string' } });
   if (args.help) {
     console.println('Usage: ./server.js [--host 127.0.0.1] [--port 56802]');
+    console.println('Use --host 0.0.0.0 only on a trusted network when remote access is required.');
     return;
   }
   const host = args.host == null ? '127.0.0.1' : args.host;

@@ -26,7 +26,7 @@ try {
   const args = options({ confirm: { type: 'boolean' } });
   if (args.help) {
     console.println('Usage: ./scripts/migrate-tag-metadata.js --confirm');
-    console.println('Drops this app\'s robot-motion tables and creates the single METADATA-based schema.');
+    console.println('Upgrade only: permanently drops this app\'s robot-motion tables and creates the current schema.');
   } else if (!args.confirm) {
     throw new Error('--confirm is required because this migration permanently deletes robot-motion data');
   } else {

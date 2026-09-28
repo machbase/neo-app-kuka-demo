@@ -281,3 +281,23 @@ and zoom-out restored 1.0x. Full playback independently loaded 33,271 frames and
 viewport with no horizontal page overflow. The empty Teach chart now clears stale pixels and keeps
 disabled navigation controls visible until a second pose supplies a navigable draft. Pointer-driven
 IK target dragging and the visual error states were not automated in this round.
+
+## 2026-09-28: Fresh-checkout guide and data preflight
+
+The four README files were normalized to the same 16 fenced command blocks and the same six-step
+fresh-checkout flow: version/clone, explicit JSH mount, read-only data verification plus schema and
+seed, foreground server session A, checker session B, and browser access. Destructive legacy
+migration is no longer shown as a normal setup command. Local and trusted-network server modes,
+the actual DB-port substitution, expected seed/check success markers, and the Teach button sequence
+are explicit in every language.
+
+Validation used `/home/sjkim2/work/neo/current/machbase-neo`, Neo **8.7.0** build **c4954cf0**.
+Direct JSH and `pkg run verify-data` both reported 30 bundled files, 33,271 frames, 450 scenarios,
+and 6,140,545 ms. The shared parser validated every source row without connecting to or modifying
+the database. All 30 recorded SHA-256 hashes also passed through the OS checksum tool.
+
+JSH `pkg run` help paths for seed, server, checker, and migration passed. Their output now identifies
+the separate checker session, trusted-network binding, and upgrade-only destructive migration.
+JavaScript syntax, Markdown fence parity, local documentation links, and `git diff --check` passed.
+Schema creation, seed insertion, migration, and browser checks were deliberately not run in this
+round; existing database data and services were unchanged.

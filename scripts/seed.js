@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const process = require('process');
 const ROOT = path.dirname(path.dirname(path.resolve(process.argv[1])));
@@ -8,11 +7,9 @@ const { dbConfig, options } = require(path.join(ROOT, 'lib/config.js'));
 const { close, withConnection } = require(path.join(ROOT, 'lib/db.js'));
 const { MOTION_TABLE } = require(path.join(ROOT, 'lib/schema.js'));
 const { MODELS, MOTIONS, generatedFrames } = require(path.join(ROOT, 'lib/robots.js'));
+const { PUBLIC_MODEL, readPublicFrames } = require(path.join(ROOT, 'lib/public-data.js'));
 
-const DEG = Math.PI / 180;
-const PUBLIC_MODEL = 'iiwa7-r800';
 const PUBLIC_RUN_NAME = PUBLIC_MODEL + '/public-all';
-const DATA_DIR = path.join(ROOT, 'scripts/data/collaborative-robotics');
 
 function appendFrame(appender, frame, metadata) {
   const joints = frame.joints.concat(Array(7 - frame.joints.length).fill(0));
@@ -60,36 +57,6 @@ function publicMetadata(frames) {
   }));
 }
 
-function readPublicFrames(runId, runStart) {
-  const frames = [];
-  let offsetMs = 0;
-  for (let user = 1; user <= 30; user++) {
-    const file = path.join(DATA_DIR, 'User_' + user + '.csv');
-    const lines = fs.readFileSync(file, 'utf8').trim().split(/\r?\n/).slice(1);
-    let lastSource = 0;
-    lines.forEach((line, sample) => {
-      const columns = line.split(',');
-      const sourceSeconds = Number(columns[0]);
-      const task = Number(columns[1]);
-      const joints = columns.slice(19, 26).map((value) => Number(value) * DEG);
-      if (columns.length !== 28 || !joints.every(Number.isFinite)) {
-        throw new Error('Invalid public dataset row in User_' + user + '.csv at line ' + (sample + 2));
-      }
-      const playbackMs = offsetMs + Math.round(sourceSeconds * 1000);
-      const logicalName = PUBLIC_MODEL + '/user-' + user + '-task-' + task;
-      frames.push({
-        name: runId + '/public/user-' + user + '-task-' + task, logicalName,
-        time: new Date(runStart + playbackMs), joints, runId, modelId: PUBLIC_MODEL,
-        scenarioId: 'user-' + user + '-task-' + task, user, task, sample,
-        playbackMs, sourceSeconds, sourceTimestamp: Number(columns[2]), sourceKind: 'public'
-      });
-      lastSource = sourceSeconds;
-    });
-    offsetMs += Math.round(lastSource * 1000);
-  }
-  return { frames, durationMs: offsetMs };
-}
-
 function generatedMotionFrames(runId, runStart, modelId, motionId) {
   return generatedFrames(modelId, motionId).map((frame, sample) => ({
     name: runId + '/studio/' + modelId + '/' + motionId, logicalName: modelId + '/' + motionId,
@@ -107,7 +74,7 @@ function seed() {
   withConnection(dbConfig(), (connection) => {
     let appender;
     try {
-      const publicData = readPublicFrames(runId, runStart);
+      const publicData = readPublicFrames(ROOT, runId, runStart);
       const publicItems = publicMetadata(publicData.frames);
       const publicByName = new Map(publicItems.map((item) => [item.name, item]));
 

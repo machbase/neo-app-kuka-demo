@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "description": "A KUKA robot motion lab for Machbase Neo 8.7.0 and later, using the JSH runtime",
   "scripts": {
+    "verify-data": "./scripts/verify-data.js",
     "start": "./app/server.js",
     "schema": "./scripts/schema.js",
     "migrate-tag-metadata": "./scripts/migrate-tag-metadata.js",
