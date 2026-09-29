@@ -107,22 +107,9 @@ Run these JSH `pkg run` commands from the project root (`/work/neo-app-kuka-demo
 | `pkg run seed` | Append one new completed run |
 | `pkg run start` | Run the foreground server in session A |
 | `pkg run check` | Check the running server from session B |
-| `pkg run migrate-tag-metadata -- --confirm` | **Legacy upgrade only; deletes this app's data** |
 
 Pass server options after `--`, for example `pkg run start -- --port 56803`. The verified
 Neo 8.7.0 build rejects `--port` as a `pkg` option when the separator is omitted.
-
-## Upgrade the legacy two-table schema
-
-Do not run this for a fresh checkout. Only for the previous schema, stop the server and run the
-following once. It permanently drops this app's `NEO_APP_ROBOT_MOTION`, `NEO_APP_ROBOT_RUN`, and
-legacy `NEO_APP_LEROBOT_MOTION`, creates the current table, and reloads the data.
-
-```text
-cd /work/neo-app-kuka-demo
-./scripts/migrate-tag-metadata.js --confirm
-./scripts/seed.js
-```
 
 ## Run the server directly from the OS shell
 
@@ -196,17 +183,6 @@ query failures remain distinct errors. Raw CSV files, server source, credentials
 files are not exposed by the HTTP server. Immediately after an append, frame visibility may
 briefly lag behind the completion marker; recall then returns transient `MOTION_NOT_READY`,
 which the browser retries for a short bounded period.
-
-## Validation coverage
-
-The checker validates app identity, three robot models, the 450-scenario catalog, an actual
-recorded scenario, a generated motion, all 33,271 full-playback frames, ordering, joint
-dimensions, source attribution, and invalid mode/scenario errors. It creates a temporary
-report under `.run/` and removes it after normal success or failure. It also checks invalid
-Teach requests without creating a visitor motion.
-
-See [validation history](doc/validation.md), [compatibility policy](doc/compatibility.md),
-and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Data and model licenses
 

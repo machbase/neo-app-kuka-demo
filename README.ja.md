@@ -91,20 +91,8 @@ cd /work/neo-app-kuka-demo/app
 | `pkg run seed` | 新しい完了runを追加 |
 | `pkg run start` | セッションAでforegroundサーバー起動 |
 | `pkg run check` | セッションBでサーバー検証 |
-| `pkg run migrate-tag-metadata -- --confirm` | **旧schema移行専用、アプリデータ削除** |
 
 オプションは`pkg run start -- --port 56803`のように`--`の後へ渡します。
-
-## 旧2テーブルschemaの移行
-
-fresh checkoutでは実行しません。旧schemaを使用している場合のみサーバーを停止し、
-次を一度実行します。このアプリのrobot-motionテーブルを完全に削除して再ロードします。
-
-```text
-cd /work/neo-app-kuka-demo
-./scripts/migrate-tag-metadata.js --confirm
-./scripts/seed.js
-```
 
 ## OSシェルから直接サーバー起動
 
@@ -169,9 +157,6 @@ Teachは`Teachを選択 → ターゲットまたは関節を移動 → Capture 
 認証情報、GitファイルはHTTP公開しません。TAG appender直後にフレームの参照可能化が
 完了マーカーより少し遅れる場合、再取得は一時的な`MOTION_NOT_READY`を返し、ブラウザが
 短時間だけ再試行します。
-
-詳細な検証履歴は[検証記録](doc/validation.md)、
-[互換性ポリシー](doc/compatibility.md)を参照してください。
 
 ## ライセンス
 

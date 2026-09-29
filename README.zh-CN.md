@@ -91,20 +91,8 @@ cd /work/neo-app-kuka-demo/app
 | `pkg run seed` | 新增一个完成的运行 |
 | `pkg run start` | 在会话 A 运行 foreground 服务器 |
 | `pkg run check` | 在会话 B 检查服务器 |
-| `pkg run migrate-tag-metadata -- --confirm` | **仅用于旧 schema 升级，会删除应用数据** |
 
 应用选项应放在 `--` 之后，例如 `pkg run start -- --port 56803`。
-
-## 升级旧的双表 schema
-
-fresh checkout 不要执行此步骤。仅在使用旧 schema 时停止服务器并执行一次。它会永久
-删除本应用的 robot-motion 表，然后重新创建并载入数据。
-
-```text
-cd /work/neo-app-kuka-demo
-./scripts/migrate-tag-metadata.js --confirm
-./scripts/seed.js
-```
 
 ## 从 OS shell 直接启动服务器
 
@@ -165,9 +153,6 @@ Teach 的使用顺序为：`选择 Teach → 移动目标点或关节 → 至少
 响应格式为 `{ok:true,data}` / `{ok:false,error:{code,message}}`。原始 CSV、服务器源码、
 凭据和 Git 文件不会通过 HTTP 公开。TAG appender 完成后，帧的查询可见性可能短暂落后于
 完成标记；此时读取会暂时返回 `MOTION_NOT_READY`，浏览器会在有限时间内重试。
-
-详细验证历史请参见[验证记录](doc/validation.md)和
-[兼容性策略](doc/compatibility.md)。
 
 ## 许可证
 

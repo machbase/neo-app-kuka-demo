@@ -108,22 +108,9 @@ cd /work/neo-app-kuka-demo/app
 | `pkg run seed` | 새 완료 실행 적재 |
 | `pkg run start` | foreground 서버 실행 — 세션 A |
 | `pkg run check` | 실행 중인 서버 검사 — 세션 B |
-| `pkg run migrate-tag-metadata -- --confirm` | **기존 2테이블 업그레이드 전용, 앱 데이터 삭제** |
 
 서버 옵션은 `pkg run start -- --port 56803`처럼 `--` 뒤에 둡니다. 검증한 Neo 8.7.0
 빌드는 구분자가 없으면 `--port`를 `pkg` 옵션으로 처리해 거부합니다.
-
-## 기존 2테이블 스키마 업그레이드
-
-fresh checkout에서는 실행하지 않습니다. 이전 스키마를 사용 중일 때만 서버를 멈추고
-아래 명령을 한 번 실행합니다. 이 앱의 `NEO_APP_ROBOT_MOTION`, `NEO_APP_ROBOT_RUN`, 과거
-`NEO_APP_LEROBOT_MOTION`을 영구 삭제한 뒤 현재 단일 테이블을 만들고 데이터를 다시 적재합니다.
-
-```text
-cd /work/neo-app-kuka-demo
-./scripts/migrate-tag-metadata.js --confirm
-./scripts/seed.js
-```
 
 ## OS 셸에서 서버 직접 실행
 
@@ -190,13 +177,6 @@ Reset과 프레임별 상세값 조회를 제공합니다. 브라우저가 reduc
 HTTP로 제공하지 않습니다. TAG appender 직후 완료 마커보다 프레임 조회 가시성이 잠깐
 늦을 수 있으며, 이때 동작 재조회는 일시적인 `MOTION_NOT_READY`를 반환하고 브라우저는
 짧게 재시도합니다.
-
-## 검증 범위
-
-`check.js`는 앱·모델·450개 시나리오, 실제 시나리오, 생성 동작, 전체 프레임과 순서·관절 수,
-출처, 잘못된 재생·Teach 입력의 실패를 확인합니다. 검사 자체는 관람객 동작을 저장하지
-않습니다. 자세한 내용은 [검증 기록](doc/validation.md),
-[호환성 정책](doc/compatibility.md), [외부 자료 고지](THIRD_PARTY_NOTICES.md)를 참고하세요.
 
 ## 데이터와 모델 라이선스
 
