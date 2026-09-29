@@ -156,7 +156,151 @@ Teachは`Teachを選択 → ターゲットまたは関節を移動 → Capture 
 応答は`{ok:true,data}` / `{ok:false,error:{code,message}}`です。元CSV、サーバーソース、
 認証情報、GitファイルはHTTP公開しません。TAG appender直後にフレームの参照可能化が
 完了マーカーより少し遅れる場合、再取得は一時的な`MOTION_NOT_READY`を返し、ブラウザが
-短時間だけ再試行します。
+短時間だけ再試行します。DBを参照した成功応答には画面SQLパネル用の
+`query:{label,sql}`も含まれます。
+
+## SQLチュートリアル：メタデータで絞り込み、フレームを読む
+
+次の読み取り専用SQLはNeo Web UIのSQLエディタまたはNeo SQLシェルで実行できます。
+
+| 領域 | 主なカラム | 意味 |
+| --- | --- | --- |
+| DATA | `NAME`, `TIME`, `VALUE`, `J2`–`J7`, `PLAYBACK_MS` | 時系列の関節フレーム。`VALUE`はJ1、関節値はradiansです。 |
+| METADATA | `TAG_KIND`, `RUN_ID`, `SOURCE_KIND`, `MODEL_ID`, `USER_NO`, `TASK_NO` | DATAを読む前にrun・出典・モデル・シナリオを絞り込みます。 |
+| METADATA | `FRAME_COUNT`, `DURATION_MS`, `START_TIME`, `END_TIME` | 期待行数とDATA時間範囲です。 |
+
+### 1. 利用可能なデータを確認
+
+```sql
+SELECT TAG_KIND, SOURCE_KIND, MODEL_ID, RUN_ID, SCENARIO_ID,
+       USER_NO, TASK_NO, FRAME_COUNT, DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+### 2. 最新の完了runで参加者とシナリオを絞り込み
+
+User 1の公開シナリオだけをメタカラムで選択します。
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT m.USER_NO, m.TASK_NO, m.FRAME_COUNT, m.DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA m, latest r
+WHERE m.RUN_ID = r.RUN_ID
+  AND m.TAG_KIND = 'MOTION'
+  AND m.SOURCE_KIND = 'public'
+  AND m.USER_NO = 1
+ORDER BY m.TASK_NO;
+```
+
+### 3. 1シナリオの関節フレームを読む
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/public/user-1-task-1'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 4. 全publicフレームからサンプルを読む
+
+`LIMIT 100`を外すと、最新の完了runにある33,271フレームを読みます。
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS, d.USER_NO, d.TASK_NO,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.RUN_ID = r.RUN_ID
+  AND d.TAG_KIND = 'MOTION'
+  AND d.SOURCE_KIND = 'public'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.USER_NO, d.SAMPLE_NO
+LIMIT 100;
+```
+
+### 5. Studio生成モーションを読む
+
+次はKR 6 Axis Showcaseの最初の20フレームです。
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/studio/kr6-r900-2/showcase'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 6. Teachモーションをモデルで絞り込み、再取得
+
+```sql
+SELECT RUN_ID, MODEL_ID, FRAME_COUNT, DURATION_MS, START_TIME, END_TIME
+FROM NEO_APP_ROBOT_MOTION METADATA
+WHERE TAG_KIND = 'RUN'
+  AND SOURCE_KIND = 'visitor-simulation'
+  AND MODEL_ID = 'iiwa7-r800'
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+最新の完了Teachモーションを読みます。
+
+```sql
+WITH latest_teach AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND SOURCE_KIND = 'visitor-simulation'
+      AND MODEL_ID = 'iiwa7-r800'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest_teach r
+WHERE d.NAME = r.RUN_ID || '/motion'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO;
+```
+
+基本パターンは`METADATAで候補選択 → 正確なNAMEとTIME範囲でDATA取得`です。アプリは
+値をpositional `?`でbindし、画面の**Last executed query**パネルには読みやすい完成SQLを表示します。
 
 ## ライセンス
 

@@ -176,7 +176,161 @@ Reset과 프레임별 상세값 조회를 제공합니다. 브라우저가 reduc
 시나리오·동작을 DB 작업 전에 검증합니다. 원본 CSV, 서버 소스, 자격정보, Git 파일은
 HTTP로 제공하지 않습니다. TAG appender 직후 완료 마커보다 프레임 조회 가시성이 잠깐
 늦을 수 있으며, 이때 동작 재조회는 일시적인 `MOTION_NOT_READY`를 반환하고 브라우저는
-짧게 재시도합니다.
+짧게 재시도합니다. DB를 조회한 성공 응답에는 화면 SQL 패널용
+`query:{label,sql}`이 추가됩니다.
+
+## SQL 튜토리얼: 메타데이터로 찾고 프레임 읽기
+
+아래 SQL은 Neo Web UI의 SQL 편집기나 Neo SQL 셸에서 그대로 실행할 수 있는 조회 예제입니다.
+이 앱의 TAG 테이블은 실제 시계열 프레임과 검색용 메타데이터를 함께 관리합니다.
+
+| 영역 | 주요 컬럼 | 의미 |
+| --- | --- | --- |
+| DATA | `NAME`, `TIME`, `VALUE`, `J2`–`J7`, `PLAYBACK_MS` | 시간순 관절 프레임. `VALUE`는 J1이며 관절값은 radians입니다. |
+| METADATA | `TAG_KIND`, `RUN_ID`, `SOURCE_KIND`, `MODEL_ID`, `USER_NO`, `TASK_NO` | DATA를 읽기 전에 실행·출처·모델·시나리오를 필터링합니다. |
+| METADATA | `FRAME_COUNT`, `DURATION_MS`, `START_TIME`, `END_TIME` | 예상 행 수와 DATA 시간 범위를 제공합니다. |
+
+### 1. 어떤 데이터가 있는지 먼저 확인
+
+`METADATA`를 붙이면 큰 프레임 영역을 읽지 않고 태그 설명만 조회합니다.
+
+```sql
+SELECT TAG_KIND, SOURCE_KIND, MODEL_ID, RUN_ID, SCENARIO_ID,
+       USER_NO, TASK_NO, FRAME_COUNT, DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+### 2. 최신 완료 run에서 참가자·시나리오 필터링
+
+먼저 최신 완료 run 하나를 고른 뒤 `USER_NO`, `TASK_NO`, `SOURCE_KIND`로 원하는 데이터만
+좁힙니다. 아래 예제는 User 1의 15개 공개 시나리오를 보여줍니다.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT m.USER_NO, m.TASK_NO, m.FRAME_COUNT, m.DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA m, latest r
+WHERE m.RUN_ID = r.RUN_ID
+  AND m.TAG_KIND = 'MOTION'
+  AND m.SOURCE_KIND = 'public'
+  AND m.USER_NO = 1
+ORDER BY m.TASK_NO;
+```
+
+### 3. 선택한 시나리오의 관절 프레임 읽기
+
+User 1 / Scenario 1의 태그 `NAME`을 만들고 완료 run의 시간 범위 안에서 읽습니다.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/public/user-1-task-1'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 4. 최신 public 데이터 전체에서 일부 읽기
+
+DATA 영역에서도 메타 컬럼을 조건으로 사용할 수 있습니다. `LIMIT 100`을 제거하면 최신
+완료 run의 33,271프레임 전체를 읽습니다.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS, d.USER_NO, d.TASK_NO,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.RUN_ID = r.RUN_ID
+  AND d.TAG_KIND = 'MOTION'
+  AND d.SOURCE_KIND = 'public'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.USER_NO, d.SAMPLE_NO
+LIMIT 100;
+```
+
+### 5. Studio 생성 동작 읽기
+
+모델과 동작은 태그 `NAME`에 포함됩니다. 다음은 KR 6 Axis Showcase의 첫 20프레임입니다.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/studio/kr6-r900-2/showcase'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 6. Teach 동작을 모델로 필터링하고 다시 읽기
+
+먼저 완료된 iiwa Teach 동작만 목록으로 확인합니다.
+
+```sql
+SELECT RUN_ID, MODEL_ID, FRAME_COUNT, DURATION_MS, START_TIME, END_TIME
+FROM NEO_APP_ROBOT_MOTION METADATA
+WHERE TAG_KIND = 'RUN'
+  AND SOURCE_KIND = 'visitor-simulation'
+  AND MODEL_ID = 'iiwa7-r800'
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+가장 최근 완료된 Teach 동작의 프레임은 다음처럼 읽습니다.
+
+```sql
+WITH latest_teach AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND SOURCE_KIND = 'visitor-simulation'
+      AND MODEL_ID = 'iiwa7-r800'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest_teach r
+WHERE d.NAME = r.RUN_ID || '/motion'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO;
+```
+
+핵심 패턴은 `METADATA로 후보 선택 → 정확한 NAME과 TIME 범위로 DATA 조회`입니다. 앱은
+사용자 값을 SQL 문자열에 붙이지 않고 positional `?`로 바인딩하며, 화면의
+**Last executed query** 패널에서는 읽기 쉽도록 bind 값이 치환된 완성 SQL을 보여줍니다.
 
 ## 데이터와 모델 라이선스
 

@@ -30,6 +30,7 @@ mounting, runs `pkg` commands from the package root, and retains the verified 8.
 | HTTP | Use `http.Server` and router context; pass `env: process.env` when serving static files | [http](https://docs.machbase.com/neo/jsh/modules/http/) |
 | DB | Use `Client({ host, port, user, password })`, positional parameters, and cleanup of query and connection resources | [machcli](https://docs.machbase.com/neo/jsh/modules/machcli/) |
 | Schema | Use the NAME / TIME / VALUE TAG model; run schema setup and insertion explicitly | [SQL](https://docs.machbase.com/neo/sql/) / [TAG](https://docs.machbase.com/neo/sql/tag-table/) |
+| Tutorial queries | Select a completed run in METADATA with a nonrecursive CTE, then read DATA by exact NAME and TIME range | [SELECT](https://docs.machbase.com/dbms/reference/sql/syntax/select-syntax/) / [CTE](https://docs.machbase.com/dbms/reference/sql/syntax/cte-syntax/) |
 | Environment and child execution | Use `process.env.get()` and `process.exec()` | [process](https://docs.machbase.com/neo/jsh/modules/process/) |
 | Output and files | Use `console.println()`, `Sync` aliases for synchronous fs APIs, and POSIX paths by default | [global](https://docs.machbase.com/neo/jsh/global/) / [fs](https://docs.machbase.com/neo/jsh/modules/fs/) / [path](https://docs.machbase.com/neo/jsh/modules/path/) |
 | Future service extensions | Use management APIs only when a controller has been explicitly obtained | [service](https://docs.machbase.com/neo/jsh/modules/service/) |
@@ -43,6 +44,11 @@ The current `machcli` documentation describes the 8.7.0 database selection optio
 `scripts/verify-data.js` is a read-only preflight. It and `seed.js` share `lib/public-data.js`, so
 file presence, row shape, finite source values, joint conversion, frame count, and scenario count
 cannot drift between preflight and ingestion. The preflight does not connect to the database.
+
+Successful DB-backed API responses include `query:{label,sql}` with a display-only completed SQL
+statement derived from the server-owned template and escaped positional values. Actual execution
+continues to use bind parameters. This is request-local response data rather than global server
+state; it never contains DB connection configuration or credentials.
 
 The browser uses Three.js r186 and public robot meshes as locally served static assets. These are browser dependencies and are not installed by JSH `pkg`; the exact files and licenses are checked into the repository. `http.Server.static()` exposes only the dedicated `public/assets` and `public/vendor` trees. Robot descriptions, source CSV files, and license source files remain outside the web root.
 

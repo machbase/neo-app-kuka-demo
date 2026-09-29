@@ -301,3 +301,33 @@ the separate checker session, trusted-network binding, and upgrade-only destruct
 JavaScript syntax, Markdown fence parity, local documentation links, and `git diff --check` passed.
 Schema creation, seed insertion, migration, and browser checks were deliberately not run in this
 round; existing database data and services were unchanged.
+
+## 2026-09-29: SQL tutorial and live query panel
+
+All seven read-only SQL tutorial blocks from the Korean README were executed against Neo **8.7.0**
+build **c4954cf0**. Metadata inspection returned 20 rows, the latest public run returned 15 User 1
+scenarios, the scenario/Studio samples returned 20 rows, and the full-public sample returned its
+100-row limit. Teach list and latest-Teach queries executed successfully with zero rows in the
+current database. No tutorial query modified data.
+
+The JSH API checker passed all 11 checks after adding request-local `query:{label,sql}` details.
+It verifies completed SQL shape and the absence of unresolved `?` parameters for the scenario
+catalog, recorded scenario, Studio motion, and full public trajectory. Direct API inspection also
+confirmed the completed Teach list SQL.
+
+Chromium `153.0.8010.12` loaded the live JSH app and changed the compact SQL panel through Full
+public, Scenario, Studio, and Teach list queries. The panel showed one completed statement with
+escaped values and COPY produced that SQL. It appeared immediately below the robot cell and before
+the reduced-height Motion Signature. At 375 px it remained visible without horizontal page
+overflow. JavaScript syntax, browser ID bindings, README SQL-block parity, local links, and
+`git diff --check` passed. Teach save was not invoked, so this round did not add visitor rows.
+
+The browser was also loaded against an already-running previous app process that still returned
+the earlier `sql + params` response. Client-side compatibility expansion removed every `?`, emitted
+executable `TO_DATE()` literals, and refreshed the panel correctly across Studio, cached Full, and
+Scenario mode changes. The existing app process was left running and unchanged.
+
+The title area was compacted without changing the demo content. At 1440 px the top bar measured
+60 px and the one-line hero 93 px. At 375 px the top bar measured 54 px and the hero 67 px; the
+eyebrow and lead were hidden, the robot section began at approximately 227 px, and no horizontal
+overflow was introduced.

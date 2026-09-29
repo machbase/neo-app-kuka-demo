@@ -6,11 +6,11 @@
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="data:,">
   <title>Neo Robot Motion Lab</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260929-compact3">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}
   </script>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=20260929-compact3"></script>
 </head>
 <body>
   <main>
@@ -22,7 +22,7 @@
     <section class="hero">
       <div>
         <p id="hero-stats" class="eyebrow">33,271 FRAMES · 450 HUMAN-GUIDED SCENARIOS</p>
-        <h1>Motion becomes<br><span>visible intelligence.</span></h1>
+        <h1>Motion becomes <span>visible intelligence.</span></h1>
       </div>
       <p class="lead">Explore a complete KUKA LBR iiwa motion dataset, replay every recorded session, or take control of three robot models in a cinematic 3D cell.</p>
     </section>
@@ -103,6 +103,14 @@
 
         <div class="source-card"><span class="source-pulse"></span><div><small>DATA SOURCE</small><strong id="source-title">Dataset for Collaborative Robotics</strong><a id="source-link" href="https://doi.org/10.17632/4fr33dkrjt.3" target="_blank" rel="noreferrer">CC BY 4.0 · DOI 10.17632/4fr33dkrjt.3 ↗</a></div></div>
       </aside>
+    </section>
+
+    <section class="sql-panel" aria-labelledby="sql-title">
+      <div class="sql-header">
+        <div><p class="eyebrow">MACHBASE SQL</p><h2 id="sql-title">Last executed query</h2><span id="sql-context">Waiting for a database query…</span></div>
+        <button id="copy-sql" class="icon-button" type="button" disabled>COPY</button>
+      </div>
+      <div class="sql-code-shell"><pre><code id="sql-statement">No SQL has been received yet.</code></pre></div>
     </section>
 
     <section class="chart-panel">

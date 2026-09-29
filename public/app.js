@@ -16,7 +16,8 @@ const ui = {};
   'source-title', 'source-link', 'joint-chart', 'chart-overview', 'chart-viewport', 'chart-tooltip',
   'chart-legend', 'chart-current', 'chart-range', 'chart-zoom-out', 'chart-zoom-in',
   'chart-reset', 'chart-follow', 'teach-motion', 'teach-options', 'teach-poses', 'teach-status',
-  'capture-pose', 'undo-pose', 'preview-motion', 'save-motion', 'saved-motion'
+  'capture-pose', 'undo-pose', 'preview-motion', 'save-motion', 'saved-motion',
+  'sql-context', 'sql-statement', 'copy-sql'
 ].forEach((id) => { ui[id] = $(id); });
 
 const state = {
@@ -25,7 +26,7 @@ const state = {
   speed: 10, lastFrameAt: performance.now(), scenarios: [], loadToken: 0,
   targetVisible: false, trail: [], lastChartAt: 0,
   chartStartMs: 0, chartEndMs: 0, chartFollow: true, chartHoverMs: null, chartMaxAbs: 1,
-  teach: { keyframes: [], saving: false }
+  teach: { keyframes: [], saving: false }, lastQueryText: ''
 };
 
 const assetCache = new Map();
@@ -49,11 +50,16 @@ async function requestJson(url, options) {
       error.code = body.error && body.error.code;
       throw error;
     }
+    if (body.data && body.data.query) renderQueryInfo(body.data.query);
     return body.data;
 }
 
 async function getJson(url) {
-  if (trajectoryCache.has(url)) return trajectoryCache.get(url);
+  if (trajectoryCache.has(url)) {
+    const data = await trajectoryCache.get(url);
+    if (data && data.query) renderQueryInfo(data.query);
+    return data;
+  }
   const request = requestJson(url);
   trajectoryCache.set(url, request);
   try { return await request; } catch (error) { trajectoryCache.delete(url); throw error; }
@@ -65,6 +71,50 @@ function postJson(url, data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
+}
+
+function displayDateLiteral(value) {
+  const text = String(value);
+  let match = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/);
+  if (!match) match = text.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(?: [+-]\d{4}(?: [A-Za-z]+)?)?$/);
+  if (!match) return null;
+  const timestamp = match[1] + ' ' + match[2] + '.' + (match[3] || '').padEnd(9, '0').slice(0, 9);
+  return "TO_DATE('" + timestamp + "', 'YYYY-MM-DD HH24:MI:SS.mmmuuunnn')";
+}
+
+function displaySqlLiteral(value) {
+  if (value == null) return 'NULL';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'NULL';
+  if (typeof value === 'boolean') return value ? '1' : '0';
+  const date = displayDateLiteral(value);
+  if (date) return date;
+  return "'" + String(value).replace(/'/g, "''") + "'";
+}
+
+function completedDisplaySql(query) {
+  if (!Array.isArray(query.params) || !query.params.length) return query.sql;
+  let index = 0;
+  return query.sql.replace(/\?/g, () => displaySqlLiteral(query.params[index++]));
+}
+
+function renderQueryInfo(query) {
+  if (!query || typeof query.sql !== 'string') return;
+  const sql = completedDisplaySql(query);
+  ui['sql-context'].textContent = query.label || 'Database query';
+  ui['sql-statement'].textContent = sql;
+  state.lastQueryText = sql;
+  ui['copy-sql'].disabled = false;
+  ui['copy-sql'].textContent = 'COPY';
+}
+
+async function copyQueryInfo() {
+  if (!state.lastQueryText) return;
+  try {
+    await navigator.clipboard.writeText(state.lastQueryText);
+    ui['copy-sql'].textContent = 'COPIED';
+  } catch (_) {
+    ui['copy-sql'].textContent = 'RETRY';
+  }
 }
 
 function quaternionFromRpy(rpy) {
@@ -969,6 +1019,7 @@ function bindEvents(){
   ui['toggle-target'].addEventListener('click',()=>setTargetVisible(!state.targetVisible));
   ui['capture-pose'].addEventListener('click',captureTeachPose);ui['undo-pose'].addEventListener('click',undoTeachPose);ui['preview-motion'].addEventListener('click',previewTeachMotion);ui['save-motion'].addEventListener('click',saveTeachMotion);
   ui['saved-motion'].addEventListener('change',()=>loadSavedTeachMotion(ui['saved-motion'].value));
+  ui['copy-sql'].addEventListener('click',copyQueryInfo);
   ui['reset-camera'].addEventListener('click',()=>setCamera(state.robot.model.camera,true));ui.retry.addEventListener('click',()=>selectModel(state.modelId));
 }
 

@@ -182,7 +182,161 @@ connection failures return `DB_UNAVAILABLE`; missing setup, incomplete runs, bad
 query failures remain distinct errors. Raw CSV files, server source, credentials, and Git
 files are not exposed by the HTTP server. Immediately after an append, frame visibility may
 briefly lag behind the completion marker; recall then returns transient `MOTION_NOT_READY`,
-which the browser retries for a short bounded period.
+which the browser retries for a short bounded period. Successful DB-backed responses also include
+`query:{label,sql}` for the on-screen SQL panel.
+
+## SQL tutorial: filter metadata, then read frames
+
+The following read-only queries run in the Neo Web UI SQL editor or Neo SQL shell. The app's TAG
+table keeps time-series frames and searchable metadata together.
+
+| Area | Main columns | Meaning |
+| --- | --- | --- |
+| DATA | `NAME`, `TIME`, `VALUE`, `J2`–`J7`, `PLAYBACK_MS` | Time-ordered joint frames. `VALUE` is J1 and joint values are radians. |
+| METADATA | `TAG_KIND`, `RUN_ID`, `SOURCE_KIND`, `MODEL_ID`, `USER_NO`, `TASK_NO` | Filters runs, sources, models, and scenarios before reading DATA. |
+| METADATA | `FRAME_COUNT`, `DURATION_MS`, `START_TIME`, `END_TIME` | Supplies expected rows and the DATA time range. |
+
+### 1. Inspect available data first
+
+The `METADATA` suffix reads tag descriptions without scanning the large frame area.
+
+```sql
+SELECT TAG_KIND, SOURCE_KIND, MODEL_ID, RUN_ID, SCENARIO_ID,
+       USER_NO, TASK_NO, FRAME_COUNT, DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+### 2. Filter participants and scenarios in the latest completed run
+
+This selects one completed run, then uses `USER_NO`, `TASK_NO`, and `SOURCE_KIND` to narrow the
+candidate set. The example returns the 15 public scenarios for User 1.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT m.USER_NO, m.TASK_NO, m.FRAME_COUNT, m.DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA m, latest r
+WHERE m.RUN_ID = r.RUN_ID
+  AND m.TAG_KIND = 'MOTION'
+  AND m.SOURCE_KIND = 'public'
+  AND m.USER_NO = 1
+ORDER BY m.TASK_NO;
+```
+
+### 3. Read joint frames from one scenario
+
+This builds the tag `NAME` for User 1 / Scenario 1 and reads it within the completed run's range.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/public/user-1-task-1'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 4. Read a sample from all public frames
+
+Metadata columns can also be predicates on the DATA area. Remove `LIMIT 100` to read all 33,271
+frames from the latest completed run.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS, d.USER_NO, d.TASK_NO,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.RUN_ID = r.RUN_ID
+  AND d.TAG_KIND = 'MOTION'
+  AND d.SOURCE_KIND = 'public'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.USER_NO, d.SAMPLE_NO
+LIMIT 100;
+```
+
+### 5. Read a generated Studio motion
+
+The model and motion are encoded in the tag `NAME`. This reads the first 20 KR 6 Axis Showcase frames.
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/studio/kr6-r900-2/showcase'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 6. Filter and recall visitor-taught motions
+
+First list only completed iiwa Teach motions.
+
+```sql
+SELECT RUN_ID, MODEL_ID, FRAME_COUNT, DURATION_MS, START_TIME, END_TIME
+FROM NEO_APP_ROBOT_MOTION METADATA
+WHERE TAG_KIND = 'RUN'
+  AND SOURCE_KIND = 'visitor-simulation'
+  AND MODEL_ID = 'iiwa7-r800'
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+Then read the most recent completed Teach motion.
+
+```sql
+WITH latest_teach AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND SOURCE_KIND = 'visitor-simulation'
+      AND MODEL_ID = 'iiwa7-r800'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest_teach r
+WHERE d.NAME = r.RUN_ID || '/motion'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO;
+```
+
+The core pattern is `select candidates in METADATA → read DATA with an exact NAME and TIME range`.
+The app binds user values with positional `?` parameters instead of concatenating SQL. Its
+**Last executed query** panel expands those values into one readable completed SQL statement.
 
 ## Data and model licenses
 

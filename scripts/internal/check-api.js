@@ -18,6 +18,12 @@ function orderedFrames(frames, dof) {
   });
 }
 
+function queryInfo(data, pattern) {
+  assert(data.query && typeof data.query.label === 'string', 'missing query label');
+  assert(typeof data.query.sql === 'string' && data.query.sql.includes(pattern), 'unexpected query SQL');
+  assert(!data.query.sql.includes('?') && data.query.params == null, 'query must be a completed SQL statement');
+}
+
 function run(base, reportFile) {
   const checks = [
     { path: '/api/health', status: 200, verify: (body) => assert(body.ok && body.data.version === '0.3.0', 'missing app identity') },
@@ -28,19 +34,23 @@ function run(base, reportFile) {
     { path: '/api/scenarios', status: 200, verify: (body) => {
       assert(body.ok && body.data.scenarios.length === 450, 'expected 450 scenarios');
       assert(body.data.frameCount === 33271, 'expected all public frames');
+      queryInfo(body.data, 'FROM NEO_APP_ROBOT_MOTION METADATA');
     } },
     { path: '/api/trajectory?mode=scenario&user=1&task=1', status: 200, verify: (body) => {
       assert(body.ok && body.data.frames.length === 82, 'unexpected User 1 scenario 1 size');
       orderedFrames(body.data.frames, 7);
+      queryInfo(body.data, 'WHERE NAME =');
     } },
     { path: '/api/trajectory?mode=studio&model=kr6-r900-2&motion=showcase', status: 200, verify: (body) => {
       assert(body.ok && body.data.frames.length === 121, 'unexpected showcase size');
       orderedFrames(body.data.frames, 6);
+      queryInfo(body.data, 'WHERE NAME =');
     } },
     { path: '/api/trajectory?mode=full', status: 200, verify: (body) => {
       assert(body.ok && body.data.frames.length === 33271, 'full playback must contain every frame');
       orderedFrames(body.data.frames, 7);
       assert(body.data.source.license === 'CC BY 4.0', 'missing public dataset attribution');
+      queryInfo(body.data, 'WHERE RUN_ID =');
     } },
     { path: '/api/trajectory?mode=unknown', status: 400, verify: (body) => assert(body.error.code === 'INVALID_MODE', 'expected INVALID_MODE') },
     { path: '/api/trajectory?mode=scenario&user=0&task=16', status: 400, verify: (body) => assert(body.error.code === 'INVALID_SCENARIO', 'expected INVALID_SCENARIO') },

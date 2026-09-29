@@ -152,7 +152,151 @@ Teach 的使用顺序为：`选择 Teach → 移动目标点或关节 → 至少
 
 响应格式为 `{ok:true,data}` / `{ok:false,error:{code,message}}`。原始 CSV、服务器源码、
 凭据和 Git 文件不会通过 HTTP 公开。TAG appender 完成后，帧的查询可见性可能短暂落后于
-完成标记；此时读取会暂时返回 `MOTION_NOT_READY`，浏览器会在有限时间内重试。
+完成标记；此时读取会暂时返回 `MOTION_NOT_READY`，浏览器会在有限时间内重试。成功的
+DB 查询响应还包含供页面 SQL 面板使用的 `query:{label,sql}`。
+
+## SQL 教程：先用元数据筛选，再读取帧
+
+以下只读 SQL 可在 Neo Web UI SQL 编辑器或 Neo SQL shell 中直接运行。
+
+| 区域 | 主要列 | 含义 |
+| --- | --- | --- |
+| DATA | `NAME`, `TIME`, `VALUE`, `J2`–`J7`, `PLAYBACK_MS` | 按时间排列的关节帧。`VALUE` 是 J1，关节值使用 radians。 |
+| METADATA | `TAG_KIND`, `RUN_ID`, `SOURCE_KIND`, `MODEL_ID`, `USER_NO`, `TASK_NO` | 在读取 DATA 前筛选运行、来源、模型和场景。 |
+| METADATA | `FRAME_COUNT`, `DURATION_MS`, `START_TIME`, `END_TIME` | 提供预期行数和 DATA 时间范围。 |
+
+### 1. 先查看有哪些数据
+
+```sql
+SELECT TAG_KIND, SOURCE_KIND, MODEL_ID, RUN_ID, SCENARIO_ID,
+       USER_NO, TASK_NO, FRAME_COUNT, DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+### 2. 在最新完成的运行中筛选参与者和场景
+
+下面通过元数据只选择 User 1 的公开场景。
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT m.USER_NO, m.TASK_NO, m.FRAME_COUNT, m.DURATION_MS
+FROM NEO_APP_ROBOT_MOTION METADATA m, latest r
+WHERE m.RUN_ID = r.RUN_ID
+  AND m.TAG_KIND = 'MOTION'
+  AND m.SOURCE_KIND = 'public'
+  AND m.USER_NO = 1
+ORDER BY m.TASK_NO;
+```
+
+### 3. 读取一个场景的关节帧
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/public/user-1-task-1'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 4. 从全部 public 帧中读取样本
+
+删除 `LIMIT 100` 后可读取最新完成运行的全部 33,271 帧。
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS, d.USER_NO, d.TASK_NO,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.RUN_ID = r.RUN_ID
+  AND d.TAG_KIND = 'MOTION'
+  AND d.SOURCE_KIND = 'public'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.USER_NO, d.SAMPLE_NO
+LIMIT 100;
+```
+
+### 5. 读取 Studio 生成动作
+
+下面读取 KR 6 Axis Showcase 的前 20 帧。
+
+```sql
+WITH latest AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND LOGICAL_NAME = 'iiwa7-r800/public-all'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6
+FROM NEO_APP_ROBOT_MOTION d, latest r
+WHERE d.NAME = r.RUN_ID || '/studio/kr6-r900-2/showcase'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO
+LIMIT 20;
+```
+
+### 6. 按模型筛选并读取 Teach 动作
+
+```sql
+SELECT RUN_ID, MODEL_ID, FRAME_COUNT, DURATION_MS, START_TIME, END_TIME
+FROM NEO_APP_ROBOT_MOTION METADATA
+WHERE TAG_KIND = 'RUN'
+  AND SOURCE_KIND = 'visitor-simulation'
+  AND MODEL_ID = 'iiwa7-r800'
+ORDER BY _LAST_UPDATE_TIME DESC
+LIMIT 20;
+```
+
+读取最近完成的 Teach 动作：
+
+```sql
+WITH latest_teach AS (
+    SELECT RUN_ID, START_TIME, END_TIME
+    FROM NEO_APP_ROBOT_MOTION METADATA
+    WHERE TAG_KIND = 'RUN'
+      AND SOURCE_KIND = 'visitor-simulation'
+      AND MODEL_ID = 'iiwa7-r800'
+    ORDER BY _LAST_UPDATE_TIME DESC
+    LIMIT 1
+)
+SELECT d.PLAYBACK_MS,
+       d.VALUE AS J1, d.J2, d.J3, d.J4, d.J5, d.J6, d.J7
+FROM NEO_APP_ROBOT_MOTION d, latest_teach r
+WHERE d.NAME = r.RUN_ID || '/motion'
+  AND d.TIME BETWEEN r.START_TIME AND r.END_TIME
+ORDER BY d.TIME, d.SAMPLE_NO;
+```
+
+核心模式是`先在 METADATA 中选择候选 → 再通过精确 NAME 和 TIME 范围读取 DATA`。应用使用
+positional `?` bind，而不是拼接 SQL；页面的 **Last executed query** 面板会显示展开后的完整 SQL。
 
 ## 许可证
 
