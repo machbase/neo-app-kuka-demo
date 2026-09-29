@@ -331,3 +331,8 @@ The title area was compacted without changing the demo content. At 1440 px the t
 60 px and the one-line hero 93 px. At 375 px the top bar measured 54 px and the hero 67 px; the
 eyebrow and lead were hidden, the robot section began at approximately 227 px, and no horizontal
 overflow was introduced.
+
+The complete app rendering area was then raised to `brightness(1.25)` for long-distance viewing.
+Live Chromium confirmed the computed 25% filter, a rendered WebGL canvas, and no horizontal
+overflow at 1440 px or 375 px. Static asset cache keys were advanced so refreshed clients receive
+the brighter CSS immediately.
